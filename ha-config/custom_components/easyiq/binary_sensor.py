@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, PRESENCE_STATUS
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,11 +77,19 @@ class EasyIQMessageBinarySensor(CoordinatorEntity, BinarySensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
+        if not self.coordinator.data:
+            return {
+                "error": "No coordinator data available",
+                "unread_count": 0,
+            }
+            
         message_data = self.coordinator.data.get("message", {})
         unread_count = self.coordinator.data.get("unread_messages", 0)
         
         attributes = {
             "unread_count": unread_count,
+            "coordinator_available": True,
+            "last_update_success": self.coordinator.last_update_success,
         }
         
         # Add message details if available
@@ -91,6 +99,10 @@ class EasyIQMessageBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 "text": message_data.get("text", ""),
                 "sender": message_data.get("sender", ""),
             })
+        else:
+            attributes["message_data_available"] = False
+        
+        return attributes
 
 
 class EasyIQPresenceBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -113,8 +125,16 @@ class EasyIQPresenceBinarySensor(CoordinatorEntity, BinarySensorEntity):
             return False
         presence_data = self.coordinator.data.get("presence_data", {}).get(self._child_id, {})
         status_code = presence_data.get("status_code", 0)
-        # Status codes 3, 4, 5 indicate presence at school
-        return status_code in [3, 4, 5]  # Present, On trip, Sleeping
+        # Status codes indicating presence at school:
+        # 3 = KOMMET/TIL STEDE (Arrived/Present)
+        # 4 = PÅ TUR (On trip)
+        # 5 = SOVER (Sleeping)
+        # Status codes indicating NOT present:
+        # 0 = IKKE KOMMET (Not arrived)
+        # 1 = SYG (Sick)
+        # 2 = FERIE/FRI (Holiday/Free)
+        # 8 = HENTET/GÅET (Picked up/Gone)
+        return status_code in [3, 4, 5]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -127,9 +147,13 @@ class EasyIQPresenceBinarySensor(CoordinatorEntity, BinarySensorEntity):
         }
         
         if presence_data:
+            status_code = presence_data.get("status_code", 0)
+            status_text = PRESENCE_STATUS.get(status_code, f"Unknown Status ({status_code})")
+            
             attributes.update({
-                "status": presence_data.get("status", "Unknown"),
-                "status_code": presence_data.get("status_code", 0),
+                "status": presence_data.get("status", status_text),
+                "status_code": status_code,
+                "status_description": status_text,
                 "last_updated": presence_data.get("last_updated", "Unknown"),
             })
             

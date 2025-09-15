@@ -652,18 +652,112 @@ class EasyIQClient:
             return {}
 
     async def get_messages(self) -> dict[str, Any]:
-        """Get messages data (placeholder for compatibility)."""
+        """Get messages data from Aula API."""
         if not self._authenticated:
             _LOGGER.warning("Not authenticated - cannot fetch messages")
             return {}
         
-        # This would need to be implemented based on the actual messages API
-        # For now, return a structure that matches what the binary sensor expects
-        return {
-            "subject": "Messages not implemented yet",
-            "text": "Message functionality needs to be implemented",
-            "sender": "System",
-        }
+        try:
+            # Run the synchronous message request in an executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self._sync_get_messages)
+        except Exception as err:
+            _LOGGER.error("Failed to get messages: %s", err)
+            return {}
+    
+    def _sync_get_messages(self) -> dict[str, Any]:
+        """Synchronous version of messages retrieval."""
+        try:
+            # Get message threads from Aula API
+            _LOGGER.debug("Fetching message threads...")
+            mesres = self._session.get(
+                self.apiurl + "?method=messaging.getThreads&sortOn=date&orderDirection=desc&page=0",
+                verify=True,
+            )
+            
+            if mesres.status_code != 200:
+                _LOGGER.error(f"Failed to get message threads: {mesres.status_code}")
+                return {}
+            
+            # Reset message data
+            self.unread_messages = 0
+            unread = 0
+            self.message = {}
+            
+            # Check for unread messages
+            threads_data = mesres.json()
+            if "data" not in threads_data or "threads" not in threads_data["data"]:
+                _LOGGER.debug("No message threads found")
+                return self.message
+            
+            # Find first unread message
+            threadid = None
+            for mes in threads_data["data"]["threads"]:
+                if not mes.get("read", True):  # Default to read if not specified
+                    unread = 1
+                    threadid = mes["id"]
+                    _LOGGER.debug(f"Found unread message thread: {threadid}")
+                    break
+            
+            # If we have an unread message, get its content
+            if unread == 1 and threadid:
+                _LOGGER.debug(f"Fetching message content for thread: {threadid}")
+                threadres = self._session.get(
+                    self.apiurl + f"?method=messaging.getMessagesForThread&threadId={threadid}&page=0",
+                    verify=True,
+                )
+                
+                if threadres.status_code == 200:
+                    thread_data = threadres.json()
+                    
+                    # Handle sensitive messages (403 status)
+                    if thread_data.get("status", {}).get("code") == 403:
+                        self.message = {
+                            "text": "Log ind på Aula med MitID for at læse denne besked.",
+                            "sender": "Ukendt afsender",
+                            "subject": "Følsom besked"
+                        }
+                        self.unread_messages = 1
+                    else:
+                        # Parse regular messages
+                        if "data" in thread_data and "messages" in thread_data["data"]:
+                            for message in thread_data["data"]["messages"]:
+                                if message.get("messageType") == "Message":
+                                    # Extract message text
+                                    try:
+                                        if isinstance(message.get("text"), dict):
+                                            self.message["text"] = message["text"].get("html", message["text"].get("text", ""))
+                                        else:
+                                            self.message["text"] = message.get("text", "")
+                                    except Exception:
+                                        self.message["text"] = "intet indhold..."
+                                        _LOGGER.warning("Could not extract message text")
+                                    
+                                    # Extract sender
+                                    try:
+                                        sender_info = message.get("sender", {})
+                                        self.message["sender"] = sender_info.get("fullName", "Ukendt afsender")
+                                    except Exception:
+                                        self.message["sender"] = "Ukendt afsender"
+                                    
+                                    # Extract subject
+                                    try:
+                                        self.message["subject"] = thread_data["data"].get("subject", "")
+                                    except Exception:
+                                        self.message["subject"] = ""
+                                    
+                                    self.unread_messages = 1
+                                    _LOGGER.info(f"Found unread message: {self.message.get('subject', 'No subject')}")
+                                    break
+                else:
+                    _LOGGER.error(f"Failed to get message thread content: {threadres.status_code}")
+            
+            _LOGGER.debug(f"Messages check complete: {self.unread_messages} unread messages")
+            return self.message
+            
+        except Exception as err:
+            _LOGGER.error(f"Error getting messages: {err}")
+            return {}
 
     async def get_presence(self, child_id: str) -> dict[str, Any]:
         """Get presence data based on current schedule events."""

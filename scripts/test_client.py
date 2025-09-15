@@ -130,6 +130,15 @@ async def main():
         else:
             print("❌ No presence data retrieved")
         
+        # Test messages
+        print(f"\n👤 Testing messages...")
+        messages_data = await client.get_messages()
+        if messages_data:
+            print("✅ Messages data retrieved!")
+            print("Messages data found")
+        else:
+            print("❌ No messages data retrieved")
+
         print(f"\n🎉 Testing complete!")
         print(f"Summary:")
         print(f"- Authentication: ✅ Working")
@@ -138,6 +147,7 @@ async def main():
         print(f"- Weekplan: {'✅ Working' if weekplan_data else '❌ Failed'}")
         print(f"- Homework: {'✅ Working' if homework_data else '❌ Failed'}")
         print(f"- Presence: {'✅ Working' if presence_data else '❌ Failed'}")
+        print(f"- Messages: {'✅ Working' if messages_data else '❌ Failed'}")
         
     finally:
         # Ensure session is properly closed

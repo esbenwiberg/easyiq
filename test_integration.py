@@ -11,9 +11,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'custom_components'))
 
 from custom_components.easyiq.client import EasyIQClient
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
+# Set up logging with DEBUG level to see all details
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 _LOGGER = logging.getLogger(__name__)
+
+# Also enable debug logging for the EasyIQ client
+logging.getLogger('custom_components.easyiq.client').setLevel(logging.DEBUG)
 
 async def test_integration():
     """Test the integration functionality."""
@@ -46,9 +52,53 @@ async def test_integration():
         _LOGGER.info(f"✅ Homework data keys: {list(client.homework_data.keys())}")
         _LOGGER.info(f"✅ Presence data keys: {list(client.presence_data.keys())}")
         
-        # Test message data
-        _LOGGER.info(f"✅ Messages: {client.message}")
-        _LOGGER.info(f"✅ Unread messages: {client.unread_messages}")
+        # Test message data in detail
+        _LOGGER.info("🔍 Testing NEW Messages System Implementation...")
+        
+        # Test direct message API call
+        try:
+            message_result = await client.get_messages()
+            _LOGGER.info(f"✅ Direct message API call successful")
+            _LOGGER.info(f"  Message result: {message_result}")
+        except Exception as e:
+            _LOGGER.error(f"❌ Direct message API call failed: {e}")
+        
+        _LOGGER.info(f"  Raw message data: {client.message}")
+        _LOGGER.info(f"  Unread count: {client.unread_messages}")
+        _LOGGER.info(f"  Message type: {type(client.message)}")
+        
+        # Test message structure
+        if isinstance(client.message, dict):
+            _LOGGER.info(f"  Message keys: {list(client.message.keys())}")
+            for key, value in client.message.items():
+                _LOGGER.info(f"    {key}: {value}")
+        
+        # Test what coordinator would see
+        coordinator_data = {
+            "children": client.children,
+            "unread_messages": client.unread_messages,
+            "message": client.message,
+            "weekplan_data": client.weekplan_data,
+            "homework_data": getattr(client, 'homework_data', {}),
+            "presence_data": getattr(client, 'presence_data', {}),
+        }
+        
+        _LOGGER.info("🔍 Testing Coordinator Data Structure...")
+        _LOGGER.info(f"  Coordinator unread_messages: {coordinator_data.get('unread_messages', 'MISSING')}")
+        _LOGGER.info(f"  Coordinator message: {coordinator_data.get('message', 'MISSING')}")
+        
+        # Simulate binary sensor logic
+        _LOGGER.info("🔍 Testing Binary Sensor Logic...")
+        unread_messages = coordinator_data.get("unread_messages", 0)
+        is_on = unread_messages > 0
+        _LOGGER.info(f"  Binary sensor would be: {'ON' if is_on else 'OFF'}")
+        _LOGGER.info(f"  Logic: unread_messages ({unread_messages}) > 0 = {is_on}")
+        
+        # Test message sensor availability
+        if client.unread_messages > 0:
+            _LOGGER.info("🎉 MESSAGES WORKING! You have unread messages!")
+        else:
+            _LOGGER.info("📭 No unread messages found (this is normal if you don't have any)")
         
         # Test each child's data
         for child in children:

@@ -11,9 +11,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'custom_components'))
 
 from custom_components.easyiq.client import EasyIQClient
 
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
+# Set up comprehensive debug logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 _LOGGER = logging.getLogger(__name__)
+
+# Enable debug logging for all EasyIQ components
+logging.getLogger('custom_components.easyiq').setLevel(logging.DEBUG)
+logging.getLogger('custom_components.easyiq.client').setLevel(logging.DEBUG)
 
 async def debug_child_ids():
     """Debug child ID mapping."""
