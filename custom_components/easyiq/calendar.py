@@ -116,24 +116,29 @@ class EasyIQCalendarEntity(CalendarEntity):
         if not self._coordinator.data:
             return events
         
-        # Get weekplan events
+        # Get weekplan events for this specific child
         weekplan_data = self._coordinator.data.get("weekplan_data", {}).get(self._child_id, {})
         weekplan_events = weekplan_data.get('events', [])
+        
+        _LOGGER.debug(f"Found {len(weekplan_events)} weekplan events for child {self._child_name} (ID: {self._child_id})")
         
         for event_data in weekplan_events:
             event = self._parse_weekplan_event(event_data)
             if event:
                 events.append(event)
         
-        # Get homework events
+        # Get homework events for this specific child
         homework_data = self._coordinator.data.get("homework_data", {}).get(self._child_id, {})
         homework_assignments = homework_data.get('assignments', [])
+        
+        _LOGGER.debug(f"Found {len(homework_assignments)} homework assignments for child {self._child_name} (ID: {self._child_id})")
         
         for assignment_data in homework_assignments:
             event = self._parse_homework_event(assignment_data)
             if event:
                 events.append(event)
         
+        _LOGGER.debug(f"Total {len(events)} events for child {self._child_name}")
         return events
 
     def _parse_weekplan_event(self, event_data: dict[str, Any]) -> CalendarEvent | None:

@@ -336,21 +336,76 @@ class EasyIQClient:
             _LOGGER.error(f"Failed to get token for widget {widget_id}: {err}")
             return ""
 
-    async def _get_calendar_events(self, child_id: str) -> list[dict[str, Any]]:
+    async def _get_calendar_events(self, child_id: str, weeks_ahead: int = 0) -> list[dict[str, Any]]:
         """Get calendar events using the working CalendarGetWeekplanEvents endpoint.
         
         This is the BREAKTHROUGH method that uses the exact Chrome DevTools approach.
+        
+        Args:
+            child_id: The child's user ID
+            weeks_ahead: Number of weeks ahead to fetch (0 = current week, 1 = next week, etc.)
         """
         try:
             # Run the synchronous calendar request in an executor to avoid blocking
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id)
+            return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id, weeks_ahead)
         except Exception as err:
             _LOGGER.error("Failed to get calendar events: %s", err)
+    async def get_calendar_events_for_business_days(self, child_id: str, days: int = 5) -> list[dict[str, Any]]:
+        """Get calendar events for the next N business days (Monday-Friday).
+        
+        Args:
+            child_id: The child's user ID
+            days: Number of business days to fetch (default: 5)
+        """
+        try:
+            all_events = []
+            current_date = datetime.datetime.now()
+            
+            # Calculate how many weeks we need to fetch to cover the business days
+            # We'll fetch current week and next week to be safe
+            for weeks_ahead in range(0, 3):  # Current week + 2 weeks ahead
+                events = await self._get_calendar_events(child_id, weeks_ahead)
+                all_events.extend(events)
+            
+            # Filter events to only include the next N business days
+            business_day_events = []
+            business_days_found = 0
+            
+            # Start from today
+            check_date = current_date.date()
+            
+            while business_days_found < days:
+                # Skip weekends (Saturday=5, Sunday=6)
+                if check_date.weekday() < 5:  # Monday=0 to Friday=4
+                    # Find events for this business day
+                    date_str = check_date.strftime("%Y/%m/%d")
+                    day_events = [
+                        event for event in all_events 
+                        if event.get("start", "").startswith(date_str)
+                    ]
+                    business_day_events.extend(day_events)
+                    business_days_found += 1
+                
+                # Move to next day
+                check_date += datetime.timedelta(days=1)
+            
+            _LOGGER.info(f"Found {len(business_day_events)} events for next {days} business days")
+            return business_day_events
+            
+        except Exception as err:
+            _LOGGER.error("Failed to get business day events: %s", err)
             return []
 
-    def _sync_get_calendar_events(self, child_id: str) -> list[dict[str, Any]]:
-        """Synchronous version of calendar events retrieval."""
+            return []
+
+    def _sync_get_calendar_events(self, child_id: str, weeks_ahead: int = 0) -> list[dict[str, Any]]:
+        """Synchronous version of calendar events retrieval.
+        
+        Args:
+            child_id: The child's user ID
+            weeks_ahead: Number of weeks ahead to fetch (0 = current week, 1 = next week, etc.)
+        """
         try:
             # Get authentication token for EasyIQ widget
             token = self.get_token(EASYIQ_WEEKPLAN_WIDGET_ID)
@@ -368,12 +423,15 @@ class EasyIQClient:
                 _LOGGER.error(f"Child data not found for ID: {child_id}")
                 return []
             
-            # Use the child's actual ID as loginId
+            # Use the child's actual ID as loginId (this was the bug!)
             actual_child_id = child_data.get("id", child_id)
+            
+            # Calculate the target date based on weeks_ahead
+            target_date = datetime.datetime.now() + datetime.timedelta(weeks=weeks_ahead)
             
             params = {
                 "loginId": str(actual_child_id),  # Use actual child ID
-                "date": datetime.datetime.now().isoformat() + "Z",
+                "date": target_date.isoformat() + "Z",  # Support different weeks
                 "activityFilter": "-1",  # Try with no filter first
                 "courseFilter": "-1",
                 "textFilter": "",
@@ -716,7 +774,7 @@ class EasyIQClient:
             }
 
     async def update_data(self) -> None:
-        """Update all data from the API."""
+        """Update all data from the API using business days approach."""
         try:
             # First authenticate if not already authenticated
             if not await self.authenticate():
@@ -726,16 +784,60 @@ class EasyIQClient:
             # Update children data
             self.children = await self.get_children()
             
-            # Update weekplan data for each child
+            # Update weekplan and homework data for each child using business days approach
             self.weekplan_data = {}
-            # Update homework data for each child
             self.homework_data = {}
             
             for child in self.children:
                 child_id = child.get("id", "")
+                child_name = child.get("name", "Unknown")
                 if child_id:
-                    self.weekplan_data[child_id] = await self.get_weekplan(child_id)
-                    self.homework_data[child_id] = await self.get_homework(child_id)
+                    _LOGGER.debug(f"Updating data for child: {child_name} (ID: {child_id})")
+                    
+                    # Get events for next 5 business days instead of just current week
+                    try:
+                        business_day_events = await self.get_calendar_events_for_business_days(child_id, 5)
+                        
+                        # Separate weekplan and homework events
+                        weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                        homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                        
+                        # Store weekplan data
+                        current_date = datetime.datetime.now()
+                        self.weekplan_data[child_id] = {
+                            "week": f"Next 5 Business Days",
+                            "events": weekplan_events,
+                            "html_content": self._build_weekplan_html(weekplan_events),
+                            "raw_data": business_day_events
+                        }
+                        
+                        # Store homework data
+                        homework_assignments = []
+                        for event in homework_events:
+                            assignment_data = {
+                                "title": event.get("courses", ""),
+                                "subject": event.get("courses", ""),
+                                "description": event.get("description", ""),
+                                "start_time": event.get("start", ""),
+                                "activities": event.get("activities", ""),
+                                "raw_data": event
+                            }
+                            homework_assignments.append(assignment_data)
+                        
+                        self.homework_data[child_id] = {
+                            "week": f"Next 5 Business Days",
+                            "assignments": homework_assignments,
+                            "html_content": self._build_homework_html(homework_assignments),
+                            "raw_data": business_day_events
+                        }
+                        
+                        _LOGGER.info(f"Updated data for {child_name}: {len(weekplan_events)} weekplan events, {len(homework_events)} homework events")
+                        
+                    except Exception as child_err:
+                        _LOGGER.error(f"Failed to update data for child {child_name}: {child_err}")
+                        # Set empty data for this child to avoid errors
+                        self.weekplan_data[child_id] = {"week": "Error", "events": [], "html_content": "", "raw_data": []}
+                        self.homework_data[child_id] = {"week": "Error", "assignments": [], "html_content": "", "raw_data": []}
             
             # Update messages (placeholder)
             self.unread_messages = 0
@@ -746,6 +848,85 @@ class EasyIQClient:
         except Exception as err:
             _LOGGER.error("Failed to update data: %s", err)
             raise
+
+    def _build_weekplan_html(self, weekplan_events: list[dict[str, Any]]) -> str:
+        """Build HTML content for weekplan events."""
+        html = "<h2>Next 5 Business Days - Schedule</h2>"
+        
+        if not weekplan_events:
+            html += "<p>No scheduled events found.</p>"
+            return html
+        
+        # Group events by date
+        events_by_date = {}
+        for event in weekplan_events:
+            start_time = event.get("start", "")
+            if start_time:
+                date_part = start_time.split(" ")[0]  # Get "2025/09/15" part
+                if date_part not in events_by_date:
+                    events_by_date[date_part] = []
+                events_by_date[date_part].append(event)
+        
+        # Sort dates and build HTML
+        for date_str in sorted(events_by_date.keys()):
+            try:
+                # Convert to readable date format
+                date_obj = datetime.datetime.strptime(date_str, "%Y/%m/%d")
+                readable_date = date_obj.strftime("%A, %B %d, %Y")
+                html += f"<h3>{readable_date}</h3>"
+                
+                # Sort events by time for this date
+                day_events = sorted(events_by_date[date_str], key=lambda x: x.get("start", ""))
+                
+                for event in day_events:
+                    start_time = event.get("start", "")
+                    end_time = event.get("end", "")
+                    courses = event.get("courses", "")
+                    activities = event.get("activities", "")
+                    description = event.get("description", "")
+                    
+                    # Extract time part
+                    start_time_part = start_time.split(" ")[1] if " " in start_time else start_time
+                    end_time_part = end_time.split(" ")[1] if " " in end_time else end_time
+                    
+                    html += f"<p><b>{start_time_part} - {end_time_part}</b><br>"
+                    html += f"<b>{courses}</b>"
+                    if activities:
+                        html += f" ({activities})"
+                    html += "<br>"
+                    if description:
+                        html += f"{description}<br>"
+                    html += "</p>"
+                        
+            except ValueError:
+                continue
+        
+        return html
+    
+    def _build_homework_html(self, homework_assignments: list[dict[str, Any]]) -> str:
+        """Build HTML content for homework assignments."""
+        html = "<h2>Next 5 Business Days - Homework</h2>"
+        
+        if not homework_assignments:
+            html += "<p>No homework assignments found.</p>"
+            return html
+        
+        for assignment in homework_assignments:
+            subject = assignment.get("subject", "Unknown Subject")
+            activities = assignment.get("activities", "")
+            start_time = assignment.get("start_time", "")
+            description = assignment.get("description", "")
+            
+            html += f"<h3>{subject}</h3>"
+            if activities:
+                html += f"<p><strong>Activities:</strong> {activities}</p>"
+            if start_time:
+                html += f"<p><strong>Time:</strong> {start_time}</p>"
+            if description:
+                html += f"<p><strong>Description:</strong> {description}</p>"
+            html += "<hr>"
+        
+        return html
 
     async def authenticate(self) -> bool:
         """Authenticate with the EasyIQ API using async approach."""
