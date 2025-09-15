@@ -1,0 +1,78 @@
+# Home Assistant Configuration Template for EasyIQ Development
+# This file provides a basic configuration to enable dashboards and logging
+
+# Basic Home Assistant configuration
+homeassistant:
+  name: EasyIQ Development
+  latitude: 55.6761
+  longitude: 12.5683
+  elevation: 0
+  unit_system: metric
+  time_zone: Europe/Copenhagen
+  country: DK
+
+# Enable the default frontend
+frontend:
+
+# Enable configuration UI
+config:
+
+# Enable Home Assistant Cloud
+cloud:
+
+# Enable system health checks
+system_health:
+
+# Enable mobile app support
+mobile_app:
+
+# Enable person tracking
+person:
+
+# Enable zones
+zone:
+
+# Enable automations UI
+automation: !include automations.yaml
+
+# Enable scenes UI  
+scene: !include scenes.yaml
+
+# Enable scripts UI
+script: !include scripts.yaml
+
+# Enable advanced logging for EasyIQ
+logger:
+  default: info
+  logs:
+    custom_components.easyiq: debug
+    homeassistant.components.sensor: debug
+    homeassistant.helpers.entity_platform: debug
+
+# Enable recorder to store entity states
+recorder:
+  purge_keep_days: 7
+
+# Enable history
+history:
+
+# Enable logbook
+logbook:
+
+# Enable energy management
+energy:
+
+# Enable analytics (optional)
+analytics:
+
+# Enable diagnostics
+diagnostics:
+
+# HTTP configuration
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 127.0.0.1
+    - ::1

@@ -1,0 +1,68 @@
+{
+  "services": {
+    "api_call": {
+      "name": "API Call",
+      "description": "Make a custom API call to EasyIQ",
+      "fields": {
+        "uri": {
+          "name": "URI",
+          "description": "URI for the API call"
+        },
+        "post_data": {
+          "name": "POST Data",
+          "description": "JSON formatted post data, if not defined, request will be GET"
+        }
+      }
+    },
+    "refresh_data": {
+      "name": "Refresh Data",
+      "description": "Force refresh of all EasyIQ data",
+      "fields": {
+        "child_id": {
+          "name": "Child ID",
+          "description": "Specific child ID to refresh data for (optional, refreshes all if not specified)"
+        }
+      }
+    }
+  },
+  "config": {
+    "error": {
+      "cannot_connect": "Failed to connect to EasyIQ",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unexpected error occurred"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "Unilogin username",
+          "password": "Unilogin password",
+          "schoolschedule": "School schedules as calendar entities",
+          "weekplan": "Weekplans as sensor attributes",
+          "homework": "Homework as sensor attributes",
+          "presence": "Presence/attendance as sensor attributes"
+        },
+        "description": "Enter your Unilogin credentials to connect to EasyIQ",
+        "title": "Authentication"
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "cannot_connect": "Failed to connect to EasyIQ",
+      "invalid_auth": "Invalid authentication credentials",
+      "unknown": "Unexpected error occurred"
+    },
+    "step": {
+      "init": {
+        "data": {
+          "schoolschedule": "School schedules as calendar entities",
+          "weekplan": "Weekplans as sensor attributes",
+          "homework": "Homework as sensor attributes",
+          "presence": "Presence/attendance as sensor attributes"
+        },
+        "description": "Configure which EasyIQ features to enable",
+        "title": "EasyIQ Options"
+      }
+    }
+  }
+}

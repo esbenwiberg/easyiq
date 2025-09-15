@@ -1,0 +1,56 @@
+2025-09-15 13:21:50.781 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
+2025-09-15 13:21:52.770 ERROR (MainThread) [homeassistant.components.binary_sensor] Error while setting up easyiq platform for binary_sensor: 'coordinator'
+Traceback (most recent call last):
+  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 451, in _async_setup_platform
+    await asyncio.shield(awaitable)
+  File "/config/custom_components/easyiq/binary_sensor.py", line 24, in async_setup_entry
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'coordinator'
+2025-09-15 13:21:52.778 ERROR (MainThread) [homeassistant.components.calendar] Error while setting up easyiq platform for calendar: 'coordinator'
+Traceback (most recent call last):
+  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 451, in _async_setup_platform
+    await asyncio.shield(awaitable)
+  File "/config/custom_components/easyiq/calendar.py", line 24, in async_setup_entry
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+KeyError: 'coordinator'
+2025-09-15 13:21:53.299 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:21:53.299 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:21:53.299 WARNING (MainThread) [custom_components.easyiq.sensor] No children data found in coordinator. Data: {'children': [], 'unread_messages': 0, 'message': {}, 'weekplan_data': {}}
+2025-09-15 13:26:54.746 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:26:54.746 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:31:55.863 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:31:55.863 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:36:56.429 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:36:56.429 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:41:57.195 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:41:57.195 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:46:58.632 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:46:58.633 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:52:00.292 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:52:00.292 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 13:57:00.693 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 13:57:00.693 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:02:01.313 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:02:01.314 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:07:02.174 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:07:02.174 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:12:03.446 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:12:03.446 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:17:04.198 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:17:04.198 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:22:04.690 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:22:04.691 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:27:05.396 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:27:05.398 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:32:05.949 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:32:05.949 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:37:06.737 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:37:06.737 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:42:07.933 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:42:07.933 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:47:09.026 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:47:09.026 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
+2025-09-15 14:52:09.585 ERROR (MainThread) [custom_components.easyiq.client] No form found in login page response
+2025-09-15 14:52:09.585 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate with EasyIQ API
