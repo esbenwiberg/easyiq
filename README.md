@@ -1,8 +1,8 @@
 # EasyIQ Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub release](https://img.shields.io/github/release/esbenwilberg/easyiq.svg)](https://github.com/esbenwilberg/easyiq/releases)
-[![License](https://img.shields.io/github/license/esbenwilberg/easyiq.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/release/esbenwiberg/easyiq.svg)](https://github.com/esbenwiberg/easyiq/releases)
+[![License](https://img.shields.io/github/license/esbenwiberg/easyiq.svg)](LICENSE)
 
 A Home Assistant custom integration for EasyIQ school management system, providing access to student schedules, homework assignments, and presence information.
 
@@ -26,7 +26,7 @@ A Home Assistant custom integration for EasyIQ school management system, providi
 2. Go to "Integrations"
 3. Click the three dots in the top right corner
 4. Select "Custom repositories"
-5. Add this repository URL: `https://github.com/esbenwilberg/easyiq`
+5. Add this repository URL: `https://github.com/esbenwiberg/easyiq`
 6. Select "Integration" as the category
 7. Click "Add"
 8. Find "EasyIQ" in the integration list and install it
@@ -34,7 +34,7 @@ A Home Assistant custom integration for EasyIQ school management system, providi
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/esbenwilberg/easyiq/releases)
+1. Download the latest release from the [releases page](https://github.com/esbenwiberg/easyiq/releases)
 2. Extract the `custom_components/easyiq` folder to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
@@ -224,7 +224,7 @@ Contributions are welcome! Please:
 ### Setup Development Environment
 
 ```bash
-git clone https://github.com/esbenwilberg/easyiq.git
+git clone https://github.com/esbenwiberg/easyiq.git
 cd easyiq-ha
 pip install -r requirements-dev.txt
 ```
@@ -249,9 +249,9 @@ This integration is not officially affiliated with EasyIQ or Aula. It's a commun
 
 ## Support
 
-- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/esbenwilberg/easyiq/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/esbenwilberg/easyiq/discussions)
-- 📖 **Documentation**: [Wiki](https://github.com/esbenwilberg/easyiq/wiki)
+- 🐛 **Bug Reports**: [GitHub Issues](https://github.com/esbenwiberg/easyiq/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/esbenwiberg/easyiq/discussions)
+- 📖 **Documentation**: [Wiki](https://github.com/esbenwiberg/easyiq/wiki)
 
 ## Changelog
 
