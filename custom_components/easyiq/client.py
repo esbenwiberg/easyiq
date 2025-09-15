@@ -351,6 +351,8 @@ class EasyIQClient:
             return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id, weeks_ahead)
         except Exception as err:
             _LOGGER.error("Failed to get calendar events: %s", err)
+            return []
+
     async def get_calendar_events_for_business_days(self, child_id: str, days: int = 5) -> list[dict[str, Any]]:
         """Get calendar events for the next N business days (Monday-Friday).
         
@@ -397,8 +399,6 @@ class EasyIQClient:
             _LOGGER.error("Failed to get business day events: %s", err)
             return []
 
-            return []
-
     def _sync_get_calendar_events(self, child_id: str, weeks_ahead: int = 0) -> list[dict[str, Any]]:
         """Synchronous version of calendar events retrieval.
         
@@ -421,10 +421,13 @@ class EasyIQClient:
             child_data = self._children_data.get(child_id)
             if not child_data:
                 _LOGGER.error(f"Child data not found for ID: {child_id}")
+                _LOGGER.debug(f"Available child data keys: {list(self._children_data.keys())}")
+                _LOGGER.debug(f"Children data: {self._children_data}")
                 return []
             
             # Use the child's actual ID as loginId (this was the bug!)
             actual_child_id = child_data.get("id", child_id)
+            _LOGGER.debug(f"Child {child_id} -> using actual_child_id: {actual_child_id} for API call")
             
             # Calculate the target date based on weeks_ahead
             target_date = datetime.datetime.now() + datetime.timedelta(weeks=weeks_ahead)
@@ -655,10 +658,11 @@ class EasyIQClient:
             return {}
         
         # This would need to be implemented based on the actual messages API
+        # For now, return a structure that matches what the binary sensor expects
         return {
             "subject": "Messages not implemented yet",
+            "text": "Message functionality needs to be implemented",
             "sender": "System",
-            "content": "Message functionality needs to be implemented"
         }
 
     async def get_presence(self, child_id: str) -> dict[str, Any]:
@@ -784,15 +788,25 @@ class EasyIQClient:
             # Update children data
             self.children = await self.get_children()
             
-            # Update weekplan and homework data for each child using business days approach
+            # Update weekplan, homework, and presence data for each child using business days approach
             self.weekplan_data = {}
             self.homework_data = {}
+            self.presence_data = {}
             
             for child in self.children:
                 child_id = child.get("id", "")
                 child_name = child.get("name", "Unknown")
                 if child_id:
-                    _LOGGER.debug(f"Updating data for child: {child_name} (ID: {child_id})")
+                    _LOGGER.info(f"Updating data for child: {child_name} (ID: {child_id})")
+                    
+                    # Debug: Show child data mapping
+                    child_data = self._children_data.get(child_id)
+                    if child_data:
+                        actual_id = child_data.get("id")
+                        _LOGGER.info(f"  Child {child_name}: userId={child_id} -> actual_id={actual_id}")
+                    else:
+                        _LOGGER.error(f"  No child data found for {child_name} (ID: {child_id})")
+                        _LOGGER.error(f"  Available child data keys: {list(self._children_data.keys())}")
                     
                     # Get events for next 5 business days instead of just current week
                     try:
@@ -831,19 +845,42 @@ class EasyIQClient:
                             "raw_data": business_day_events
                         }
                         
+                        # Get presence data for this child
+                        self.presence_data[child_id] = await self.get_presence(child_id)
+                        
                         _LOGGER.info(f"Updated data for {child_name}: {len(weekplan_events)} weekplan events, {len(homework_events)} homework events")
                         
                     except Exception as child_err:
-                        _LOGGER.error(f"Failed to update data for child {child_name}: {child_err}")
-                        # Set empty data for this child to avoid errors
-                        self.weekplan_data[child_id] = {"week": "Error", "events": [], "html_content": "", "raw_data": []}
-                        self.homework_data[child_id] = {"week": "Error", "assignments": [], "html_content": "", "raw_data": []}
+                        _LOGGER.error(f"Failed to update data for child {child_name}: {child_err}", exc_info=True)
+                        # Set empty data for this child to avoid errors but keep integration running
+                        self.weekplan_data[child_id] = {
+                            "week": "Error - Check Logs",
+                            "events": [],
+                            "html_content": f"<p>Error updating data for {child_name}. Check Home Assistant logs.</p>",
+                            "raw_data": []
+                        }
+                        self.homework_data[child_id] = {
+                            "week": "Error - Check Logs",
+                            "assignments": [],
+                            "html_content": f"<p>Error updating homework for {child_name}. Check Home Assistant logs.</p>",
+                            "raw_data": []
+                        }
+                        self.presence_data[child_id] = {
+                            "status": "Error - Check Logs",
+                            "status_code": 0,
+                            "last_updated": datetime.datetime.now().isoformat()
+                        }
             
             # Update messages (placeholder)
             self.unread_messages = 0
             self.message = await self.get_messages()
             
-            _LOGGER.debug("Successfully updated all data")
+            _LOGGER.info("Successfully updated all data")
+            _LOGGER.debug(f"Final data summary:")
+            _LOGGER.debug(f"  Children: {len(self.children)}")
+            _LOGGER.debug(f"  Weekplan data keys: {list(self.weekplan_data.keys())}")
+            _LOGGER.debug(f"  Homework data keys: {list(self.homework_data.keys())}")
+            _LOGGER.debug(f"  Presence data keys: {list(self.presence_data.keys())}")
             
         except Exception as err:
             _LOGGER.error("Failed to update data: %s", err)

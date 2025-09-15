@@ -32,21 +32,8 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up EasyIQ sensor based on a config entry."""
-    username = config_entry.data[CONF_USERNAME]
-    password = config_entry.data[CONF_PASSWORD]
-    
-    # Create the EasyIQ client
-    client = EasyIQClient(username, password)
-    
-    # Create coordinator for data updates
-    coordinator = EasyIQDataUpdateCoordinator(hass, client)
-    
-    # Fetch initial data so we have data when entities subscribe
-    await coordinator.async_config_entry_first_refresh()
-    
-    # Store client and coordinator in hass data
-    hass.data[DOMAIN][config_entry.entry_id]["client"] = client
-    hass.data[DOMAIN][config_entry.entry_id]["coordinator"] = coordinator
+    # Use the coordinator created in __init__.py instead of creating a new one
+    coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinator"]
     
     # Create sensor entities
     entities = []
@@ -94,15 +81,27 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
         """Update data via library."""
         try:
             await self.client.update_data()
-            return {
+            data = {
                 "children": self.client.children,
                 "unread_messages": self.client.unread_messages,
                 "message": self.client.message,
                 "weekplan_data": self.client.weekplan_data,
                 "homework_data": getattr(self.client, 'homework_data', {}),
+                "presence_data": getattr(self.client, 'presence_data', {}),
             }
+            _LOGGER.debug(f"Coordinator updated data successfully: {len(data['children'])} children")
+            return data
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            _LOGGER.error(f"Error updating coordinator data: {err}", exc_info=True)
+            # Return partial data to keep integration running instead of failing completely
+            return {
+                "children": getattr(self.client, 'children', []),
+                "unread_messages": getattr(self.client, 'unread_messages', 0),
+                "message": getattr(self.client, 'message', {"subject": "Error", "text": "Update failed", "sender": "System"}),
+                "weekplan_data": getattr(self.client, 'weekplan_data', {}),
+                "homework_data": getattr(self.client, 'homework_data', {}),
+                "presence_data": getattr(self.client, 'presence_data', {}),
+            }
 
 
 class EasyIQChildSensor(CoordinatorEntity, SensorEntity):

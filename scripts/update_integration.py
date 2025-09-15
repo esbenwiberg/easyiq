@@ -32,6 +32,10 @@ def main():
             sys.exit(1)
         print("✅ Container started")
     
+    # Create directory structure in container first
+    print("📁 Creating directory structure in container...")
+    run_command("docker exec homeassistant mkdir -p /config/custom_components/easyiq/translations")
+    
     # Copy updated integration files
     print("📋 Copying updated integration files...")
     
@@ -40,6 +44,7 @@ def main():
         "custom_components/easyiq/sensor.py",
         "custom_components/easyiq/client.py",
         "custom_components/easyiq/calendar.py",
+        "custom_components/easyiq/binary_sensor.py",  # Added missing binary_sensor.py!
         "custom_components/easyiq/manifest.json",
         "custom_components/easyiq/config_flow.py",
         "custom_components/easyiq/const.py",
