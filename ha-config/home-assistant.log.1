@@ -1,104 +1,15 @@
-2025-09-15 16:32:52.384 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
-2025-09-15 16:32:58.047 ERROR (SyncWorker_2) [custom_components.easyiq.client] Manual Brotli decompression failed: BrotliDecompress failed
-2025-09-15 16:32:58.151 ERROR (SyncWorker_1) [custom_components.easyiq.client] Manual Brotli decompression failed: BrotliDecompress failed
-2025-09-15 16:32:58.247 WARNING (MainThread) [homeassistant.util.loop] Detected blocking call to open with args ('/usr/local/lib/python3.13/site-packages/pytz/zoneinfo/Africa/Abidjan', 'rb') inside the event loop by custom integration 'easyiq' at custom_components/easyiq/calendar.py, line 154: copenhagen_tz = pytz.timezone('Europe/Copenhagen') (offender: /usr/local/lib/python3.13/site-packages/pytz/__init__.py, line 108: return open(filename, 'rb')), please create a bug report at https://github.com/your-username/easyiq-ha/issues
-For developers, please see https://developers.home-assistant.io/docs/asyncio_blocking_operations/#open
-Traceback (most recent call last):
-  File "<frozen runpy>", line 198, in _run_module_as_main
-  File "<frozen runpy>", line 88, in _run_code
-  File "/usr/src/homeassistant/homeassistant/__main__.py", line 223, in <module>
-    sys.exit(main())
-  File "/usr/src/homeassistant/homeassistant/__main__.py", line 209, in main
-    exit_code = runner.run(runtime_conf)
-  File "/usr/src/homeassistant/homeassistant/runner.py", line 156, in run
-    return loop.run_until_complete(setup_and_run_hass(runtime_config))
-  File "/usr/local/lib/python3.13/asyncio/base_events.py", line 712, in run_until_complete
-    self.run_forever()
-  File "/usr/local/lib/python3.13/asyncio/base_events.py", line 683, in run_forever
-    self._run_once()
-  File "/usr/local/lib/python3.13/asyncio/base_events.py", line 2050, in _run_once
-    handle._run()
-  File "/usr/local/lib/python3.13/asyncio/events.py", line 89, in _run
-    self._context.run(self._callback, *self._args)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 896, in async_setup_locked
-    await self.async_setup(hass, integration=integration)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 662, in async_setup
-    await self.__async_setup_with_context(hass, integration)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 751, in __async_setup_with_context
-    result = await component.async_setup_entry(hass, self)
-  File "/config/custom_components/easyiq/__init__.py", line 62, in async_setup_entry
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 2584, in async_forward_entry_setups
-    await self._async_forward_entry_setups_locked(entry, platforms)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 2595, in _async_forward_entry_setups_locked
-    await asyncio.gather(
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 2597, in <genexpr>
-    create_eager_task(
-  File "/usr/src/homeassistant/homeassistant/util/async_.py", line 44, in create_eager_task
-    return Task(coro, loop=loop, name=name, eager_start=True)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 2636, in _async_forward_entry_setup
-    await entry.async_setup(self.hass, integration=integration)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 662, in async_setup
-    await self.__async_setup_with_context(hass, integration)
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 751, in __async_setup_with_context
-    result = await component.async_setup_entry(hass, self)
-  File "/usr/src/homeassistant/homeassistant/components/calendar/__init__.py", line 344, in async_setup_entry
-    return await hass.data[DATA_COMPONENT].async_setup_entry(entry)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_component.py", line 230, in async_setup_entry
-    return await self._platforms[key].async_setup_entry(config_entry)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 418, in async_setup_entry
-    return await self._async_setup_platform(async_create_setup_awaitable)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 448, in _async_setup_platform
-    awaitable = create_eager_task(awaitable, loop=hass.loop)
-  File "/usr/src/homeassistant/homeassistant/util/async_.py", line 44, in create_eager_task
-    return Task(coro, loop=loop, name=name, eager_start=True)
-  File "/config/custom_components/easyiq/calendar.py", line 48, in async_setup_entry
-    async_add_entities(entities)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 575, in _async_schedule_add_entities_for_entry
-    task = self.config_entry.async_create_task(
-  File "/usr/src/homeassistant/homeassistant/config_entries.py", line 1290, in async_create_task
-    task = hass.async_create_task_internal(
-  File "/usr/src/homeassistant/homeassistant/core.py", line 829, in async_create_task_internal
-    task = create_eager_task(target, name=name, loop=self.loop)
-  File "/usr/src/homeassistant/homeassistant/util/async_.py", line 44, in create_eager_task
-    return Task(coro, loop=loop, name=name, eager_start=True)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 726, in async_add_entities
-    await self._async_add_entities(entities, timeout, config_subentry_id)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 676, in _async_add_entities
-    await self._async_add_entity(
-  File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 1002, in _async_add_entity
-    await entity.add_to_platform_finish()
-  File "/usr/src/homeassistant/homeassistant/helpers/entity.py", line 1382, in add_to_platform_finish
-    self.async_write_ha_state()
-  File "/usr/src/homeassistant/homeassistant/components/calendar/__init__.py", line 563, in async_write_ha_state
-    super().async_write_ha_state()
-  File "/usr/src/homeassistant/homeassistant/helpers/entity.py", line 1026, in async_write_ha_state
-    self._async_write_ha_state()
-  File "/usr/src/homeassistant/homeassistant/helpers/entity.py", line 1151, in _async_write_ha_state
-    self.__async_calculate_state()
-  File "/usr/src/homeassistant/homeassistant/helpers/entity.py", line 1088, in __async_calculate_state
-    state = self._stringify_state(available)
-  File "/usr/src/homeassistant/homeassistant/helpers/entity.py", line 1032, in _stringify_state
-    if (state := self.state) is None:
-  File "/usr/src/homeassistant/homeassistant/components/calendar/__init__.py", line 546, in state
-    if (event := self.event) is None:
-  File "/config/custom_components/easyiq/calendar.py", line 67, in event
-    all_events = self._get_all_events()
-  File "/config/custom_components/easyiq/calendar.py", line 124, in _get_all_events
-    event = self._parse_weekplan_event(event_data)
-  File "/config/custom_components/easyiq/calendar.py", line 154, in _parse_weekplan_event
-    copenhagen_tz = pytz.timezone('Europe/Copenhagen')
-
-2025-09-15 16:32:58.705 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:32:58.709 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:32:58.709 WARNING (MainThread) [homeassistant.helpers.entity] Updating state for calendar.easyiq_avi_emilie_wiberg_lohmann_calendar (<class 'custom_components.easyiq.calendar.EasyIQCalendarEntity'>) took 0.499 seconds. Please create a bug report at https://github.com/your-username/easyiq-ha/issues
-2025-09-15 16:32:58.710 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:32:58.711 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:32:58.711 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:32:58.712 ERROR (MainThread) [custom_components.easyiq.calendar] Error getting next event: can't compare offset-naive and offset-aware datetimes
-2025-09-15 16:33:00.795 ERROR (SyncWorker_0) [custom_components.easyiq.client] Manual Brotli decompression failed: BrotliDecompress failed
-2025-09-15 16:33:00.997 ERROR (SyncWorker_8) [custom_components.easyiq.client] Manual Brotli decompression failed: BrotliDecompress failed
-2025-09-15 16:33:01.036 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 16:33:01.036 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 16:33:01.048 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 16:33:01.048 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-15 16:51:45.922 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
+2025-09-15 16:51:49.390 ERROR (SyncWorker_8) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:51:49.390 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data
+2025-09-15 16:51:50.476 ERROR (SyncWorker_2) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:51:50.476 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data
+2025-09-15 16:51:50.476 WARNING (MainThread) [custom_components.easyiq.sensor] No children data found in coordinator. Data: {'children': [], 'unread_messages': 0, 'message': {}, 'weekplan_data': {}, 'homework_data': {}}
+2025-09-15 16:51:58.835 ERROR (SyncWorker_8) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:51:58.836 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data
+2025-09-15 16:51:59.586 ERROR (SyncWorker_0) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:51:59.586 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data
+2025-09-15 16:51:59.586 WARNING (MainThread) [custom_components.easyiq.sensor] No children data found in coordinator. Data: {'children': [], 'unread_messages': 0, 'message': {}, 'weekplan_data': {}, 'homework_data': {}}
+2025-09-15 16:57:00.745 ERROR (SyncWorker_4) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:57:00.745 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data
+2025-09-15 16:57:00.767 ERROR (SyncWorker_3) [custom_components.easyiq.client] Authentication failed after 10 redirects
+2025-09-15 16:57:00.767 ERROR (MainThread) [custom_components.easyiq.client] Failed to authenticate - cannot update data

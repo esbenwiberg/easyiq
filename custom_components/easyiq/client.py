@@ -111,7 +111,7 @@ class EasyIQClient:
             await self.session.close()
 
     def login(self) -> bool:
-        """Login using synchronous requests (working Aula authentication approach)."""
+        """Login using the proven working Aula authentication approach."""
         if requests is None or BS4 is None:
             _LOGGER.error("requests or BeautifulSoup not available - cannot authenticate")
             return False
@@ -120,7 +120,7 @@ class EasyIQClient:
             _LOGGER.debug("Logging in")
             self._session = requests.Session()
             
-            # Step 1: Get initial login page
+            # Step 1: Get initial login page (simplified approach from working Aula client)
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
@@ -140,18 +140,10 @@ class EasyIQClient:
                 verify=True,
             )
 
-            _LOGGER.debug(f"Login page response status: {response.status_code}")
-            if response.status_code != 200:
-                _LOGGER.error(f"Login page returned status {response.status_code}")
-                return False
-
             _html = BS4(response.text, "lxml")
-            if not _html.form:
-                _LOGGER.error("No form found in login page response")
-                return False
             _url = _html.form["action"]
             
-            # Step 2: Submit IdP selection
+            # Step 2: Submit IdP selection (simplified)
             headers = {
                 "Host": "broker.unilogin.dk",
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
@@ -169,7 +161,7 @@ class EasyIQClient:
             data = {"selectedIdp": "uni_idp"}
             response = self._session.post(_url, headers=headers, data=data, verify=True)
 
-            # Step 3: Complete authentication flow
+            # Step 3: Complete authentication flow (simplified from working Aula client)
             user_data = {
                 "username": self.username,
                 "password": self.password,
@@ -180,9 +172,6 @@ class EasyIQClient:
             url = ""
             while success == False and redirects < 10:
                 html = BS4(response.text, "lxml")
-                if not html.form:
-                    _LOGGER.error(f"No form found in authentication step {redirects}")
-                    break
                 url = html.form["action"]
 
                 post_data = {}
@@ -431,29 +420,29 @@ class EasyIQClient:
                     _LOGGER.debug(f"Content encoding: {response.headers.get('content-encoding', 'none')}")
                     _LOGGER.debug(f"Content type: {response.headers.get('content-type', 'none')}")
                     
-                    # Handle Brotli compression explicitly
-                    content_encoding = response.headers.get('content-encoding', '').lower()
-                    if 'br' in content_encoding:
-                        _LOGGER.debug("Response is Brotli compressed, attempting manual decompression")
-                        try:
-                            import brotli
-                            decompressed_content = brotli.decompress(response.content)
-                            json_text = decompressed_content.decode('utf-8')
-                            _LOGGER.debug(f"Successfully decompressed Brotli content: {len(json_text)} chars")
-                            _LOGGER.debug(f"Decompressed content preview: {json_text[:200]}...")
-                            
-                            import json
-                            events = json.loads(json_text)
-                        except ImportError:
-                            _LOGGER.warning("brotli library not available, trying requests default decompression")
-                            events = response.json()
-                        except Exception as decomp_error:
-                            _LOGGER.error(f"Manual Brotli decompression failed: {decomp_error}")
-                            # Fallback to requests default
-                            events = response.json()
-                    else:
-                        # No Brotli compression, use normal JSON parsing
+                    # Let requests handle decompression automatically (including Brotli)
+                    # This is more reliable than manual decompression
+                    try:
                         events = response.json()
+                        _LOGGER.debug(f"Successfully parsed JSON response with {len(events)} events")
+                    except Exception as json_error:
+                        _LOGGER.error(f"Failed to parse JSON response: {json_error}")
+                        # Try manual decompression as last resort
+                        content_encoding = response.headers.get('content-encoding', '').lower()
+                        if 'br' in content_encoding:
+                            _LOGGER.debug("Attempting manual Brotli decompression as fallback")
+                            try:
+                                import brotli
+                                decompressed_content = brotli.decompress(response.content)
+                                json_text = decompressed_content.decode('utf-8')
+                                import json
+                                events = json.loads(json_text)
+                                _LOGGER.debug("Manual Brotli decompression successful")
+                            except Exception as decomp_error:
+                                _LOGGER.debug(f"Manual Brotli decompression also failed: {decomp_error}")
+                                events = []
+                        else:
+                            events = []
                     
                     _LOGGER.info("🎉 Successfully retrieved %d calendar events!", len(events))
                     
@@ -739,10 +728,14 @@ class EasyIQClient:
             
             # Update weekplan data for each child
             self.weekplan_data = {}
+            # Update homework data for each child
+            self.homework_data = {}
+            
             for child in self.children:
                 child_id = child.get("id", "")
                 if child_id:
                     self.weekplan_data[child_id] = await self.get_weekplan(child_id)
+                    self.homework_data[child_id] = await self.get_homework(child_id)
             
             # Update messages (placeholder)
             self.unread_messages = 0

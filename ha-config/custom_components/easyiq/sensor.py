@@ -99,6 +99,7 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
                 "unread_messages": self.client.unread_messages,
                 "message": self.client.message,
                 "weekplan_data": self.client.weekplan_data,
+                "homework_data": getattr(self.client, 'homework_data', {}),
             }
         except Exception as err:
             raise UpdateFailed(f"Error communicating with API: {err}") from err
