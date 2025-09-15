@@ -74,12 +74,17 @@ def main():
     print("1. Restart Home Assistant")
     print("2. Go to Settings → Devices & Services")
     print("3. Add EasyIQ integration")
-    print("4. Check for new sensors and entities")
+    print("4. Check for NEW separate calendars:")
+    print("   - EasyIQ [Child Name] Weekplan (school schedule)")
+    print("   - EasyIQ [Child Name] Homework (assignments)")
+    print("5. Check for presence sensors: EasyIQ [Child Name] Present")
+    print("6. Check messages sensor: EasyIQ Messages")
     
     print("\n🔍 If you have issues:")
     print("1. Check Home Assistant logs")
     print("2. Run: python diagnose_integration.py")
-    print("3. Verify all files were copied correctly")
+    print("3. Run: python test_integration.py")
+    print("4. Verify all files were copied correctly")
 
 if __name__ == "__main__":
     main()

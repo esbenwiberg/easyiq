@@ -77,8 +77,12 @@ def main():
     print("1. Wait for Home Assistant to start (30-60 seconds)")
     print("2. Go to http://localhost:8123")
     print("3. Check Settings → Devices & Services → EasyIQ")
-    print("4. Look for more entities and better status")
-    print("5. Check logs: docker logs homeassistant | grep -i easyiq")
+    print("4. Look for NEW separate calendars:")
+    print("   - EasyIQ [Child Name] Weekplan (school schedule)")
+    print("   - EasyIQ [Child Name] Homework (assignments)")
+    print("5. Check for presence sensors: EasyIQ [Child Name] Present")
+    print("6. Check messages sensor: EasyIQ Messages")
+    print("7. Check logs: docker logs homeassistant | grep -i easyiq")
 
 if __name__ == "__main__":
     main()
