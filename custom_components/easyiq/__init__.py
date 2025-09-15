@@ -8,8 +8,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
+from homeassistant.exceptions import ConfigEntryNotReady
 
 from .const import DOMAIN, STARTUP
+from .client import EasyIQClient
+from .sensor import EasyIQDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,7 +29,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info(STARTUP, integration.version)
     
     hass.data.setdefault(DOMAIN, {})
-    hass_data = dict(entry.data)
+    
+    # Create the EasyIQ client
+    client = EasyIQClient(
+        username=entry.data["username"],
+        password=entry.data["password"],
+    )
+    
+    # Create the data update coordinator
+    coordinator = EasyIQDataUpdateCoordinator(hass, client)
+    
+    # Perform initial data fetch
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception as err:
+        _LOGGER.error("Failed to perform initial data fetch: %s", err)
+        raise ConfigEntryNotReady from err
+    
+    # Store coordinator and client in hass data
+    hass_data = {
+        "coordinator": coordinator,
+        "client": client,
+    }
     
     # Registers update listener to update config entry when options are updated.
     unsub_options_update_listener = entry.add_update_listener(options_update_listener)

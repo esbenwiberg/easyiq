@@ -347,11 +347,21 @@ class EasyIQClient:
             _LOGGER.error(f"Failed to get token for widget {widget_id}: {err}")
             return ""
 
-    def _get_calendar_events(self, child_id: str) -> list[dict[str, Any]]:
+    async def _get_calendar_events(self, child_id: str) -> list[dict[str, Any]]:
         """Get calendar events using the working CalendarGetWeekplanEvents endpoint.
         
         This is the BREAKTHROUGH method that uses the exact Chrome DevTools approach.
         """
+        try:
+            # Run the synchronous calendar request in an executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id)
+        except Exception as err:
+            _LOGGER.error("Failed to get calendar events: %s", err)
+            return []
+
+    def _sync_get_calendar_events(self, child_id: str) -> list[dict[str, Any]]:
+        """Synchronous version of calendar events retrieval."""
         try:
             # Get authentication token for EasyIQ widget
             token = self.get_token(EASYIQ_WEEKPLAN_WIDGET_ID)
@@ -492,7 +502,7 @@ class EasyIQClient:
         
         try:
             # Get calendar events (contains both weekplan and homework)
-            events = self._get_calendar_events(child_id)
+            events = await self._get_calendar_events(child_id)
             if not events:
                 return {}
             
@@ -542,7 +552,7 @@ class EasyIQClient:
         
         try:
             # Get calendar events (contains both weekplan and homework)
-            events = self._get_calendar_events(child_id)
+            events = await self._get_calendar_events(child_id)
             if not events:
                 return {}
             
@@ -612,7 +622,7 @@ class EasyIQClient:
         
         try:
             # Get calendar events to determine current presence
-            events = self._get_calendar_events(child_id)
+            events = await self._get_calendar_events(child_id)
             if not events:
                 return {
                     "status": "No Schedule Data",
@@ -715,3 +725,42 @@ class EasyIQClient:
                 "status_code": 0,
                 "last_updated": datetime.datetime.now().isoformat()
             }
+
+    async def update_data(self) -> None:
+        """Update all data from the API."""
+        try:
+            # First authenticate if not already authenticated
+            if not await self.authenticate():
+                _LOGGER.error("Failed to authenticate - cannot update data")
+                return
+            
+            # Update children data
+            self.children = await self.get_children()
+            
+            # Update weekplan data for each child
+            self.weekplan_data = {}
+            for child in self.children:
+                child_id = child.get("id", "")
+                if child_id:
+                    self.weekplan_data[child_id] = await self.get_weekplan(child_id)
+            
+            # Update messages (placeholder)
+            self.unread_messages = 0
+            self.message = await self.get_messages()
+            
+            _LOGGER.debug("Successfully updated all data")
+            
+        except Exception as err:
+            _LOGGER.error("Failed to update data: %s", err)
+            raise
+
+    async def authenticate(self) -> bool:
+        """Authenticate with the EasyIQ API using async approach."""
+        try:
+            # Run the synchronous login in an executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, self.login)
+            return result
+        except Exception as err:
+            _LOGGER.error("Unexpected error during authentication: %s", err)
+            return False

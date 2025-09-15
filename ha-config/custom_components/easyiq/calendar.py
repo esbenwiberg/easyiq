@@ -4,11 +4,13 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any
+import pytz
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 
@@ -68,7 +70,7 @@ class EasyIQCalendarEntity(CalendarEntity):
                 return None
             
             # Find the next upcoming event
-            now = datetime.now()
+            now = dt_util.now()  # Use timezone-aware current time
             upcoming_events = [event for event in all_events if event.start > now]
             
             if upcoming_events:
@@ -144,9 +146,14 @@ class EasyIQCalendarEntity(CalendarEntity):
             if not start_str:
                 return None
             
-            # Convert from "2025/09/15 08:05" format to datetime
+            # Convert from "2025/09/15 08:05" format to timezone-aware datetime
             event_start = datetime.strptime(start_str, "%Y/%m/%d %H:%M")
             event_end = datetime.strptime(end_str, "%Y/%m/%d %H:%M") if end_str else event_start
+            
+            # Make timezone-aware (assume Europe/Copenhagen timezone for Danish schools)
+            copenhagen_tz = pytz.timezone('Europe/Copenhagen')
+            event_start = copenhagen_tz.localize(event_start)
+            event_end = copenhagen_tz.localize(event_end)
             
             # Create CalendarEvent object for weekplan
             summary = event_data.get('courses', 'School Event')
@@ -185,17 +192,23 @@ class EasyIQCalendarEntity(CalendarEntity):
             start_time_str = assignment_data.get('start_time', '')
             
             # If we have a start time, use it; otherwise create an all-day event
+            copenhagen_tz = pytz.timezone('Europe/Copenhagen')
             if start_time_str:
                 try:
                     event_start = datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
                     event_end = event_start.replace(hour=event_start.hour + 1)  # 1 hour duration
+                    # Make timezone-aware
+                    event_start = copenhagen_tz.localize(event_start)
+                    event_end = copenhagen_tz.localize(event_end)
                 except ValueError:
                     # If parsing fails, create all-day event for today
-                    event_start = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+                    now = dt_util.now()
+                    event_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
                     event_end = event_start.replace(hour=10)
             else:
                 # Create all-day homework event for today
-                event_start = datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+                now = dt_util.now()
+                event_start = now.replace(hour=9, minute=0, second=0, microsecond=0)
                 event_end = event_start.replace(hour=10)
             
             # Build description
