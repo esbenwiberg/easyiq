@@ -151,10 +151,10 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
             event_start = datetime.strptime(start_str, "%Y/%m/%d %H:%M")
             event_end = datetime.strptime(end_str, "%Y/%m/%d %H:%M") if end_str else event_start
             
-            # Make timezone-aware (assume Europe/Copenhagen timezone for Danish schools)
-            copenhagen_tz = pytz.timezone('Europe/Copenhagen')
-            event_start = copenhagen_tz.localize(event_start)
-            event_end = copenhagen_tz.localize(event_end)
+            # Make timezone-aware using Home Assistant's timezone utilities
+            # This avoids blocking calls to pytz.timezone
+            event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
+            event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
             
             # Create CalendarEvent object for weekplan
             summary = event_data.get('courses', 'School Event')
@@ -193,14 +193,13 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
             start_time_str = assignment_data.get('start_time', '')
             
             # If we have a start time, use it; otherwise create an all-day event
-            copenhagen_tz = pytz.timezone('Europe/Copenhagen')
             if start_time_str:
                 try:
                     event_start = datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
                     event_end = event_start.replace(hour=event_start.hour + 1)  # 1 hour duration
-                    # Make timezone-aware
-                    event_start = copenhagen_tz.localize(event_start)
-                    event_end = copenhagen_tz.localize(event_end)
+                    # Make timezone-aware using Home Assistant's timezone utilities
+                    event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
+                    event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
                 except ValueError:
                     # If parsing fails, create all-day event for today
                     now = dt_util.now()
@@ -330,14 +329,13 @@ class EasyIQHomeworkCalendarEntity(CalendarEntity):
             start_time_str = assignment_data.get('start_time', '')
             
             # If we have a start time, use it; otherwise create an all-day event
-            copenhagen_tz = pytz.timezone('Europe/Copenhagen')
             if start_time_str:
                 try:
                     event_start = datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
                     event_end = event_start.replace(hour=event_start.hour + 1)  # 1 hour duration
-                    # Make timezone-aware
-                    event_start = copenhagen_tz.localize(event_start)
-                    event_end = copenhagen_tz.localize(event_end)
+                    # Make timezone-aware using Home Assistant's timezone utilities
+                    event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
+                    event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
                 except ValueError:
                     # If parsing fails, create all-day event for today
                     now = dt_util.now()

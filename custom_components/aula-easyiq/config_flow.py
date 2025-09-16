@@ -100,7 +100,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        super().__init__()
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -115,23 +115,27 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         CONF_SCHOOLSCHEDULE,
-                        default=self.config_entry.options.get(CONF_SCHOOLSCHEDULE, True),
+                        default=self._get_option(CONF_SCHOOLSCHEDULE, True),
                     ): bool,
                     vol.Optional(
                         CONF_WEEKPLAN,
-                        default=self.config_entry.options.get(CONF_WEEKPLAN, True),
+                        default=self._get_option(CONF_WEEKPLAN, True),
                     ): bool,
                     vol.Optional(
                         CONF_HOMEWORK,
-                        default=self.config_entry.options.get(CONF_HOMEWORK, True),
+                        default=self._get_option(CONF_HOMEWORK, True),
                     ): bool,
                     vol.Optional(
                         CONF_PRESENCE,
-                        default=self.config_entry.options.get(CONF_PRESENCE, True),
+                        default=self._get_option(CONF_PRESENCE, True),
                     ): bool,
                 }
             ),
         )
+
+    def _get_option(self, key: str, default: Any) -> Any:
+        """Get option value from config entry."""
+        return self.config_entry.options.get(key, default)
 
 
 class CannotConnect(HomeAssistantError):

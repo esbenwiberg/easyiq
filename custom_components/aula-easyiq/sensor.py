@@ -175,10 +175,24 @@ class EasyIQWeekplanSensor(CoordinatorEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the state attributes."""
         weekplan_data = self.coordinator.data.get("weekplan_data", {}).get(self._child_id, {})
+        
+        # Limit the size of weekplan data to avoid database issues
+        # Only include essential information
+        limited_weekplan = {}
+        if isinstance(weekplan_data, dict):
+            # Include only the most recent events (limit to 10)
+            events = weekplan_data.get("events", [])
+            if isinstance(events, list):
+                limited_weekplan["events"] = events[:10]
+                limited_weekplan["total_events"] = len(events)
+            
+            # Include summary information
+            limited_weekplan["last_updated"] = weekplan_data.get("last_updated")
+        
         return {
             "child_id": self._child_id,
             "child_name": self._child_name,
-            "weekplan": weekplan_data,
+            "weekplan_summary": limited_weekplan,
         }
 
 
