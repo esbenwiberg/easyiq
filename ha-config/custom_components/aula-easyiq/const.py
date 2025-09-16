@@ -17,7 +17,7 @@ https://github.com/easyiq/easyiq-ha/issues
 -------------------------------------------------------------------
 """
 
-DOMAIN = "easyiq"
+DOMAIN = "aula-easyiq"
 
 # API Endpoints
 API = "https://www.aula.dk/api/v"

@@ -1,6 +1,7 @@
-2025-09-16 20:07:57.425 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
-2025-09-16 20:08:03.133 ERROR (SyncWorker_8) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:08:04.243 WARNING (MainThread) [homeassistant.util.loop] Detected blocking call to open with args ('/usr/local/lib/python3.13/site-packages/pytz/zoneinfo/Africa/Abidjan', 'rb') inside the event loop by custom integration 'easyiq' at custom_components/easyiq/calendar.py, line 155: copenhagen_tz = pytz.timezone('Europe/Copenhagen') (offender: /usr/local/lib/python3.13/site-packages/pytz/__init__.py, line 108: return open(filename, 'rb')), please create a bug report at https://github.com/your-username/easyiq-ha/issues
+2025-09-16 20:53:39.933 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration aula-easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
+2025-09-16 20:53:39.959 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
+2025-09-16 20:53:46.855 ERROR (SyncWorker_3) [custom_components.easyiq.client] Calendar events API returned status 500
+2025-09-16 20:53:48.193 WARNING (MainThread) [homeassistant.util.loop] Detected blocking call to open with args ('/usr/local/lib/python3.13/site-packages/pytz/zoneinfo/Africa/Abidjan', 'rb') inside the event loop by custom integration 'easyiq' at custom_components/easyiq/calendar.py, line 155: copenhagen_tz = pytz.timezone('Europe/Copenhagen') (offender: /usr/local/lib/python3.13/site-packages/pytz/__init__.py, line 108: return open(filename, 'rb')), please create a bug report at https://github.com/your-username/easyiq-ha/issues
 For developers, please see https://developers.home-assistant.io/docs/asyncio_blocking_operations/#open
 Traceback (most recent call last):
   File "<frozen runpy>", line 198, in _run_module_as_main
@@ -88,13 +89,6 @@ Traceback (most recent call last):
   File "/config/custom_components/easyiq/calendar.py", line 155, in _parse_weekplan_event
     copenhagen_tz = pytz.timezone('Europe/Copenhagen')
 
-2025-09-16 20:08:04.572 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-16 20:08:04.595 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-16 20:13:06.907 ERROR (SyncWorker_8) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:18:11.362 ERROR (SyncWorker_1) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:23:15.234 ERROR (SyncWorker_4) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:28:19.661 ERROR (SyncWorker_3) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:33:24.506 ERROR (SyncWorker_2) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:38:28.277 ERROR (SyncWorker_8) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:43:32.333 ERROR (SyncWorker_1) [custom_components.easyiq.client] Calendar events API returned status 500
-2025-09-16 20:48:37.095 ERROR (SyncWorker_0) [custom_components.easyiq.client] Calendar events API returned status 500
+2025-09-16 20:53:48.582 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-16 20:53:48.616 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-16 20:58:51.204 ERROR (SyncWorker_0) [custom_components.easyiq.client] Calendar events API returned status 500
