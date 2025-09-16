@@ -34,22 +34,22 @@ def main():
     
     # Create directory structure in container first
     print("📁 Creating directory structure in container...")
-    run_command("docker exec homeassistant mkdir -p /config/custom_components/easyiq/translations")
+    run_command("docker exec homeassistant mkdir -p /config/custom_components/aula-easyiq/translations")
     
     # Copy updated integration files
     print("📋 Copying updated integration files...")
     
     files_to_copy = [
-        "custom_components/easyiq/__init__.py",
-        "custom_components/easyiq/sensor.py",
-        "custom_components/easyiq/client.py",
-        "custom_components/easyiq/calendar.py",
-        "custom_components/easyiq/binary_sensor.py",  # Added missing binary_sensor.py!
-        "custom_components/easyiq/manifest.json",
-        "custom_components/easyiq/config_flow.py",
-        "custom_components/easyiq/const.py",
-        "custom_components/easyiq/strings.json",
-        "custom_components/easyiq/translations/en.json"
+        "custom_components/aula-easyiq/__init__.py",
+        "custom_components/aula-easyiq/sensor.py",
+        "custom_components/aula-easyiq/client.py",
+        "custom_components/aula-easyiq/calendar.py",
+        "custom_components/aula-easyiq/binary_sensor.py",  # Added missing binary_sensor.py!
+        "custom_components/aula-easyiq/manifest.json",
+        "custom_components/aula-easyiq/config_flow.py",
+        "custom_components/aula-easyiq/const.py",
+        "custom_components/aula-easyiq/strings.json",
+        "custom_components/aula-easyiq/translations/en.json"
     ]
     
     for file_path in files_to_copy:

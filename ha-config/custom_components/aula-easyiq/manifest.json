@@ -1,0 +1,17 @@
+{
+  "domain": "aula-easyiq",
+  "name": "Aula-EasyIQ",
+  "version": "0.2.0",
+  "documentation": "https://github.com/esbenwiberg/easyiq",
+  "issue_tracker": "https://github.com/esbenwiberg/easyiq/issues",
+  "dependencies": [],
+  "codeowners": ["@esbenwiberg"],
+  "requirements": ["aiohttp>=3.8.0"],
+  "config_flow": true,
+  "dhcp": [],
+  "homekit": {},
+  "ssdp": [],
+  "zeroconf": [],
+  "integration_type": "service",
+  "iot_class": "cloud_polling"
+}

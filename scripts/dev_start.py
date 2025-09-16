@@ -86,7 +86,7 @@ zone:
 logger:
   default: info
   logs:
-    custom_components.easyiq: debug
+    custom_components.aula_easyiq: debug
 
 # Development tools
 developer_tools:

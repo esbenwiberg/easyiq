@@ -7,7 +7,7 @@ import sys
 import os
 
 # Add the custom_components directory to the path
-sys.path.append('custom_components/easyiq')
+sys.path.append('custom_components/aula-easyiq')
 from client import EasyIQClient
 
 # Set up logging

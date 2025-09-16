@@ -48,14 +48,14 @@ def check_file_structure():
     project_root = Path(__file__).parent.parent
     
     required_files = [
-        "custom_components/easyiq/__init__.py",
-        "custom_components/easyiq/manifest.json",
-        "custom_components/easyiq/const.py",
-        "custom_components/easyiq/client.py",
-        "custom_components/easyiq/config_flow.py",
-        "custom_components/easyiq/sensor.py",
-        "custom_components/easyiq/binary_sensor.py",
-        "custom_components/easyiq/calendar.py",
+        "custom_components/aula-easyiq/__init__.py",
+        "custom_components/aula-easyiq/manifest.json",
+        "custom_components/aula-easyiq/const.py",
+        "custom_components/aula-easyiq/client.py",
+        "custom_components/aula-easyiq/config_flow.py",
+        "custom_components/aula-easyiq/sensor.py",
+        "custom_components/aula-easyiq/binary_sensor.py",
+        "custom_components/aula-easyiq/calendar.py",
     ]
     
     all_good = True
@@ -77,9 +77,9 @@ def validate_json_files():
     project_root = Path(__file__).parent.parent
     
     json_files = [
-        "custom_components/easyiq/manifest.json",
-        "custom_components/easyiq/strings.json",
-        "custom_components/easyiq/translations/en.json",
+        "custom_components/aula-easyiq/manifest.json",
+        "custom_components/aula-easyiq/strings.json",
+        "custom_components/aula-easyiq/translations/en.json",
     ]
     
     all_valid = True
@@ -106,13 +106,13 @@ def test_python_syntax():
     project_root = Path(__file__).parent.parent
     
     python_files = [
-        "custom_components/easyiq/__init__.py",
-        "custom_components/easyiq/const.py",
-        "custom_components/easyiq/client.py",
-        "custom_components/easyiq/config_flow.py",
-        "custom_components/easyiq/sensor.py",
-        "custom_components/easyiq/binary_sensor.py",
-        "custom_components/easyiq/calendar.py",
+        "custom_components/aula-easyiq/__init__.py",
+        "custom_components/aula-easyiq/const.py",
+        "custom_components/aula-easyiq/client.py",
+        "custom_components/aula-easyiq/config_flow.py",
+        "custom_components/aula-easyiq/sensor.py",
+        "custom_components/aula-easyiq/binary_sensor.py",
+        "custom_components/aula-easyiq/calendar.py",
     ]
     
     all_valid = True
@@ -232,7 +232,7 @@ def show_debug_tips():
     print("• Always test credentials first with option 2")
     print("• Check logs in terminal when running dev server")
     print("• Use Home Assistant web UI: Settings → System → Logs")
-    print("• Look for 'custom_components.easyiq' in logs")
+    print("• Look for 'custom_components.aula_easyiq' in logs")
     print("• Check entity states in Developer Tools → States")
     print("• Restart Home Assistant after code changes")
     print("• Use DEBUGGING.md for detailed troubleshooting")

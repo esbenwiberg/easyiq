@@ -9,7 +9,7 @@ import os
 # Add the custom_components path to sys.path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'custom_components'))
 
-from custom_components.easyiq.client import EasyIQClient
+from custom_components.aula_easyiq.client import EasyIQClient
 
 # Set up comprehensive debug logging
 logging.basicConfig(
@@ -19,8 +19,8 @@ logging.basicConfig(
 _LOGGER = logging.getLogger(__name__)
 
 # Enable debug logging for all EasyIQ components
-logging.getLogger('custom_components.easyiq').setLevel(logging.DEBUG)
-logging.getLogger('custom_components.easyiq.client').setLevel(logging.DEBUG)
+logging.getLogger('custom_components.aula_easyiq').setLevel(logging.DEBUG)
+logging.getLogger('custom_components.aula_easyiq.client').setLevel(logging.DEBUG)
 
 async def debug_child_ids():
     """Debug child ID mapping."""
