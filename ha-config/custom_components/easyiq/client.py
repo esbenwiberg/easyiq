@@ -353,29 +353,40 @@ class EasyIQClient:
             _LOGGER.error("Failed to get calendar events: %s", err)
             return []
 
-    async def get_calendar_events_for_business_days(self, child_id: str, days: int = 5) -> list[dict[str, Any]]:
+    async def get_calendar_events_for_business_days(self, child_id: str, days: int = 5, weeks_ahead: int = 0) -> list[dict[str, Any]]:
         """Get calendar events for the next N business days (Monday-Friday).
         
         Args:
             child_id: The child's user ID
             days: Number of business days to fetch (default: 5)
+            weeks_ahead: Number of weeks ahead to start from (0=current week, 1=next week, etc.)
         """
         try:
             all_events = []
             current_date = datetime.datetime.now()
             
             # Calculate how many weeks we need to fetch to cover the business days
-            # We'll fetch current week and next week to be safe
-            for weeks_ahead in range(0, 3):  # Current week + 2 weeks ahead
-                events = await self._get_calendar_events(child_id, weeks_ahead)
+            # Start from the specified weeks_ahead and fetch additional weeks if needed
+            for week_offset in range(weeks_ahead, weeks_ahead + 3):  # Fetch 3 weeks starting from weeks_ahead
+                events = await self._get_calendar_events(child_id, week_offset)
                 all_events.extend(events)
             
             # Filter events to only include the next N business days
             business_day_events = []
             business_days_found = 0
             
-            # Start from today
-            check_date = current_date.date()
+            # Start from the beginning of the target week
+            if weeks_ahead == 0:
+                check_date = current_date.date()
+            else:
+                # Calculate the start date for the target week
+                days_to_add = weeks_ahead * 7
+                # Find the Monday of the target week
+                target_date = current_date + datetime.timedelta(days=days_to_add)
+                # Get to Monday of that week
+                days_since_monday = target_date.weekday()
+                monday_of_week = target_date - datetime.timedelta(days=days_since_monday)
+                check_date = monday_of_week.date()
             
             while business_days_found < days:
                 # Skip weekends (Saturday=5, Sunday=6)
@@ -392,7 +403,8 @@ class EasyIQClient:
                 # Move to next day
                 check_date += datetime.timedelta(days=1)
             
-            _LOGGER.info(f"Found {len(business_day_events)} events for next {days} business days")
+            week_desc = "current week" if weeks_ahead == 0 else f"{weeks_ahead} week{'s' if weeks_ahead > 1 else ''} ahead"
+            _LOGGER.info(f"Found {len(business_day_events)} events for next {days} business days starting from {week_desc}")
             return business_day_events
             
         except Exception as err:

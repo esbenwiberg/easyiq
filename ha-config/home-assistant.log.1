@@ -1,5 +1,5 @@
-2025-09-15 20:54:52.366 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
-2025-09-15 20:55:02.342 WARNING (MainThread) [homeassistant.util.loop] Detected blocking call to open with args ('/usr/local/lib/python3.13/site-packages/pytz/zoneinfo/Africa/Abidjan', 'rb') inside the event loop by custom integration 'easyiq' at custom_components/easyiq/calendar.py, line 159: copenhagen_tz = pytz.timezone('Europe/Copenhagen') (offender: /usr/local/lib/python3.13/site-packages/pytz/__init__.py, line 108: return open(filename, 'rb')), please create a bug report at https://github.com/your-username/easyiq-ha/issues
+2025-09-15 21:10:39.038 WARNING (SyncWorker_0) [homeassistant.loader] We found a custom integration easyiq which has not been tested by Home Assistant. This component might cause stability problems, be sure to disable it if you experience issues with Home Assistant
+2025-09-15 21:10:47.410 WARNING (MainThread) [homeassistant.util.loop] Detected blocking call to open with args ('/usr/local/lib/python3.13/site-packages/pytz/zoneinfo/Africa/Abidjan', 'rb') inside the event loop by custom integration 'easyiq' at custom_components/easyiq/calendar.py, line 155: copenhagen_tz = pytz.timezone('Europe/Copenhagen') (offender: /usr/local/lib/python3.13/site-packages/pytz/__init__.py, line 108: return open(filename, 'rb')), please create a bug report at https://github.com/your-username/easyiq-ha/issues
 For developers, please see https://developers.home-assistant.io/docs/asyncio_blocking_operations/#open
 Traceback (most recent call last):
   File "<frozen runpy>", line 198, in _run_module_as_main
@@ -50,7 +50,7 @@ Traceback (most recent call last):
     awaitable = create_eager_task(awaitable, loop=hass.loop)
   File "/usr/src/homeassistant/homeassistant/util/async_.py", line 44, in create_eager_task
     return Task(coro, loop=loop, name=name, eager_start=True)
-  File "/config/custom_components/easyiq/calendar.py", line 48, in async_setup_entry
+  File "/config/custom_components/easyiq/calendar.py", line 55, in async_setup_entry
     async_add_entities(entities)
   File "/usr/src/homeassistant/homeassistant/helpers/entity_platform.py", line 575, in _async_schedule_add_entities_for_entry
     task = self.config_entry.async_create_task(
@@ -80,15 +80,15 @@ Traceback (most recent call last):
     if (state := self.state) is None:
   File "/usr/src/homeassistant/homeassistant/components/calendar/__init__.py", line 546, in state
     if (event := self.event) is None:
-  File "/config/custom_components/easyiq/calendar.py", line 67, in event
-    all_events = self._get_all_events()
-  File "/config/custom_components/easyiq/calendar.py", line 126, in _get_all_events
+  File "/config/custom_components/easyiq/calendar.py", line 74, in event
+    all_events = self._get_weekplan_events()
+  File "/config/custom_components/easyiq/calendar.py", line 133, in _get_weekplan_events
     event = self._parse_weekplan_event(event_data)
-  File "/config/custom_components/easyiq/calendar.py", line 159, in _parse_weekplan_event
+  File "/config/custom_components/easyiq/calendar.py", line 155, in _parse_weekplan_event
     copenhagen_tz = pytz.timezone('Europe/Copenhagen')
 
-2025-09-15 20:55:04.182 WARNING (MainThread) [homeassistant.helpers.entity] Updating state for calendar.easyiq_avi_emilie_wiberg_lohmann_calendar (<class 'custom_components.easyiq.calendar.EasyIQCalendarEntity'>) took 1.927 seconds. Please create a bug report at https://github.com/your-username/easyiq-ha/issues
-2025-09-15 20:55:04.526 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 20:55:04.527 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 20:55:04.557 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
-2025-09-15 20:55:04.557 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-15 21:10:48.165 WARNING (MainThread) [homeassistant.helpers.entity] Updating state for calendar.easyiq_avi_emilie_wiberg_lohmann_weekplan (<class 'custom_components.easyiq.calendar.EasyIQWeekplanCalendarEntity'>) took 0.798 seconds. Please create a bug report at https://github.com/your-username/easyiq-ha/issues
+2025-09-15 21:10:48.371 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-15 21:10:48.372 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-15 21:10:48.396 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_avi_emilie_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
+2025-09-15 21:10:48.397 WARNING (Recorder) [homeassistant.components.recorder.db_schema] State attributes for sensor.easyiq_max_emil_wiberg_lohmann_weekplan exceed maximum size of 16384 bytes. This can cause database performance issues; Attributes will not be stored
