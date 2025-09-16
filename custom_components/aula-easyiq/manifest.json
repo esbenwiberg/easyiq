@@ -1,9 +1,9 @@
 {
   "domain": "aula-easyiq",
   "name": "Aula-EasyIQ",
-  "version": "0.2.0",
   "documentation": "https://github.com/esbenwiberg/easyiq",
   "issue_tracker": "https://github.com/esbenwiberg/easyiq/issues",
+  "version": "0.2.0",
   "dependencies": [],
   "codeowners": ["@esbenwiberg"],
   "requirements": ["aiohttp>=3.8.0"],
