@@ -12,6 +12,5 @@
   "homekit": {},
   "ssdp": [],
   "zeroconf": [],
-  "integration_type": "service",
-  "iot_class": "cloud_polling"
+  "integration_type": "service"
 }
