@@ -227,14 +227,21 @@ class EasyIQClient:
             profile_json = profile_response.json()
             self._profilecontext = profile_json["data"]["institutionProfile"]["relations"]
             
-            # Extract children data for compatibility
+            # Extract children data and institution profiles for compatibility
             self._children_data = {}
             self._childnames = {}
             self._childuserids = []
             self._childids = []
             self.children = []
             
+            # Extract institution profiles dynamically from auth response
             for profile in self._profiles:
+                # Extract institution codes from institutionProfiles
+                for institutioncode in profile["institutionProfiles"]:
+                    institution_code = str(institutioncode["institutionCode"])
+                    if institution_code not in self._institution_profiles:
+                        self._institution_profiles.append(institution_code)
+                
                 for child in profile["children"]:
                     # Store both userId and id for different API calls
                     user_id = child["userId"]
@@ -261,6 +268,7 @@ class EasyIQClient:
                     })
 
             _LOGGER.info(f"Found {len(self.children)} children: {[c['name'] for c in self.children]}")
+            _LOGGER.debug(f"Institution codes: {self._institution_profiles}")
             
             self._authenticated = True
             return True
@@ -474,10 +482,9 @@ class EasyIQClient:
                 # Custom headers from Chrome DevTools
                 "x-child": child_id,
                 "x-childfilter": child_id,
-                "x-institutionfilter": "731003,G20313",  # Institution-specific filter
+                "x-institutionfilter": ",".join(self._institution_profiles) if self._institution_profiles else "",  # Dynamic institution filter
                 "x-login": self.username,
                 "x-userprofile": "guardian",
-                "x-widgetinstanceid": "168810a-dafa-40a6-9a12-18cd4654939e"  # From Chrome DevTools
             }
             
             _LOGGER.debug("Calendar events request - URL: %s", url)
