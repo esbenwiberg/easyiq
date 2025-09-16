@@ -17,7 +17,7 @@ This script:
 ### 2. Wait for Home Assistant to Start
 ```bash
 # Wait 30-60 seconds for full startup
-timeout 15
+timeout 30
 ```
 
 ### 3. Check Integration Logs

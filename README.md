@@ -155,6 +155,109 @@ sensor:
           {% endif %}
 ```
 
+### Advanced Automation: Homework reminder
+
+```yaml
+automation:
+  - alias: "Homework due tomorrow"
+    trigger:
+      - platform: time
+        at: "19:00:00"
+    condition:
+      - condition: template
+        value_template: >
+          {{ state_attr('sensor.easyiq_child_weekplan', 'homework_due_tomorrow') | length > 0 }}
+    action:
+      - service: notify.family
+        data:
+          message: "Homework due tomorrow: {{ state_attr('sensor.easyiq_child_weekplan', 'homework_due_tomorrow') | join(', ') }}"
+```
+
+### Automation: School pickup reminder
+
+```yaml
+automation:
+  - alias: "School pickup reminder"
+    trigger:
+      - platform: template
+        value_template: >
+          {{ (as_timestamp(now()) - as_timestamp(state_attr('sensor.easyiq_child_weekplan', 'last_event_end'))) < 1800 }}
+    action:
+      - service: notify.mobile_app
+        data:
+          message: "School ends soon - pickup time!"
+```
+
+### Dashboard: Today's schedule card
+
+```yaml
+type: markdown
+content: |
+  ## Today's Schedule
+  {% set events = state_attr('sensor.easyiq_child_weekplan', 'events') %}
+  {% for event in events if event.date == now().strftime('%Y-%m-%d') %}
+  - **{{ event.start }}**: {{ event.courses }}
+  {% endfor %}
+```
+
+### Dashboard: Weekly overview card
+
+```yaml
+type: custom:auto-entities
+card:
+  type: entities
+  title: This Week's Events
+filter:
+  include:
+    - entity_id: sensor.easyiq_*_weekplan
+      options:
+        type: custom:multiple-entity-row
+        entity: sensor.easyiq_child_weekplan
+        name: "{{ state_attr(config.entity, 'child_name') }}"
+        secondary_info: "{{ state_attr(config.entity, 'events_count') }} events"
+```
+
+### Dashboard: Presence tracking card
+
+```yaml
+type: glance
+title: School Attendance
+entities:
+  - entity: sensor.easyiq_child_presence
+    name: Status
+  - entity: sensor.easyiq_child_presence
+    name: Location
+    attribute: location
+  - entity: sensor.easyiq_child_presence
+    name: Arrival
+    attribute: arrival_time
+```
+
+### Template: Homework summary sensor
+
+```yaml
+sensor:
+  - platform: template
+    sensors:
+      homework_summary:
+        friendly_name: "Homework Summary"
+        value_template: >
+          {% set homework = state_attr('sensor.easyiq_child_weekplan', 'homework') %}
+          {% if homework %}
+            {{ homework | length }} assignments due
+          {% else %}
+            No homework
+          {% endif %}
+        attribute_templates:
+          due_today: >
+            {% set homework = state_attr('sensor.easyiq_child_weekplan', 'homework') %}
+            {{ homework | selectattr('due_date', 'eq', now().strftime('%Y-%m-%d')) | list | length }}
+          due_tomorrow: >
+            {% set homework = state_attr('sensor.easyiq_child_weekplan', 'homework') %}
+            {% set tomorrow = (now() + timedelta(days=1)).strftime('%Y-%m-%d') %}
+            {{ homework | selectattr('due_date', 'eq', tomorrow) | list | length }}
+```
+
 ## Troubleshooting
 
 ### Common Issues

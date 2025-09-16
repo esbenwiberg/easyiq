@@ -2,16 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [1.0.0] - 2025-09-15
+## [0.1.0] - 2025-09-15
 
 ### Added
 - Initial release of EasyIQ Home Assistant integration
 - Support for weekly schedule (weekplan) data retrieval
 - Support for homework assignments (lektier) data retrieval
 - Support for student presence status monitoring
+- Support for Aula messages monitoring
 - Calendar integration for school events
 - Multi-child support for families with multiple students
 - English interface with Danish school data support
@@ -27,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Technical
 - Uses EasyIQ CalendarGetWeekplanEvents API endpoint
-- Authenticates via Aula credentials
+- Authenticates via Aula credentials (Unilogin)
 - Supports both schedule events (itemType 9) and homework (itemType 4)
 - Implements proper Home Assistant integration patterns
 - Includes comprehensive error handling and logging
@@ -41,5 +39,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planned
 - Support for additional EasyIQ features
 - Enhanced error handling for network issues
-- Improved caching for better performance
-- Support for multiple institution configurations
