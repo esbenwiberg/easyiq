@@ -3,7 +3,7 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'custom_components', 'aula-easyiq'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'custom_components', 'aula_easyiq'))
 
 import requests
 from bs4 import BeautifulSoup

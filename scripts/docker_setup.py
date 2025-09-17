@@ -91,8 +91,8 @@ logger:
 
 def copy_integration(config_dir):
     """Copy EasyIQ integration to Home Assistant config."""
-    source_dir = Path("custom_components/aula-easyiq")
-    target_dir = config_dir / "custom_components/aula-easyiq"
+    source_dir = Path("custom_components/aula_easyiq")
+    target_dir = config_dir / "custom_components/aula_easyiq"
     
     if not source_dir.exists():
         print(f"❌ Source integration not found: {source_dir}")

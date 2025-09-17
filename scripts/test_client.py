@@ -43,7 +43,7 @@ async def main():
     print("=" * 60)
     
     # Import our client
-    sys.path.append('custom_components/aula-easyiq')
+    sys.path.append('custom_components/aula_easyiq')
     from client import EasyIQClient
     
     username, password = load_credentials()

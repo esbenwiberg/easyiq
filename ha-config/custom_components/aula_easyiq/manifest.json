@@ -1,16 +1,17 @@
 {
   "domain": "aula_easyiq",
   "name": "Aula-EasyIQ",
-  "documentation": "https://github.com/esbenwiberg/easyiq",
-  "issue_tracker": "https://github.com/esbenwiberg/easyiq/issues",
-  "version": "0.2.0",
-  "dependencies": [],
   "codeowners": ["@esbenwiberg"],
-  "requirements": ["aiohttp>=3.8.0"],
   "config_flow": true,
+  "dependencies": [],
   "dhcp": [],
+  "documentation": "https://github.com/esbenwiberg/easyiq",
   "homekit": {},
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/esbenwiberg/easyiq/issues",
+  "requirements": ["aiohttp>=3.8.0"],
   "ssdp": [],
-  "zeroconf": [],
-  "integration_type": "service"
+  "version": "0.2.0",
+  "zeroconf": []
 }

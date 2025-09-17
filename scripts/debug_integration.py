@@ -19,7 +19,7 @@ def check_integration_files():
     """Check if integration files are properly installed."""
     print("🔍 Checking integration files...")
     
-    success, output = run_docker_command("docker exec homeassistant ls -la /config/custom_components/aula-easyiq/")
+    success, output = run_docker_command("docker exec homeassistant ls -la /config/custom_components/aula_easyiq/")
     if success:
         print("✅ Integration files found:")
         print(output)
@@ -29,7 +29,7 @@ def check_integration_files():
         return False
     
     # Check manifest.json
-    success, output = run_docker_command("docker exec homeassistant cat /config/custom_components/aula-easyiq/manifest.json")
+    success, output = run_docker_command("docker exec homeassistant cat /config/custom_components/aula_easyiq/manifest.json")
     if success:
         try:
             manifest = json.loads(output)

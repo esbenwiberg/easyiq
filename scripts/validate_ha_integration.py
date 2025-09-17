@@ -14,7 +14,7 @@ def validate_manifest():
     """Validate manifest.json file."""
     print("🔍 Validating manifest.json...")
     
-    manifest_path = Path("custom_components/aula-easyiq/manifest.json")
+    manifest_path = Path("custom_components/aula_easyiq/manifest.json")
     if not manifest_path.exists():
         print("❌ manifest.json not found")
         return False
@@ -41,7 +41,7 @@ def validate_init_file():
     """Validate __init__.py file."""
     print("🔍 Validating __init__.py...")
     
-    init_path = Path("custom_components/aula-easyiq/__init__.py")
+    init_path = Path("custom_components/aula_easyiq/__init__.py")
     if not init_path.exists():
         print("❌ __init__.py not found")
         return False
@@ -70,7 +70,7 @@ def validate_config_flow():
     """Validate config_flow.py file."""
     print("🔍 Validating config_flow.py...")
     
-    config_flow_path = Path("custom_components/aula-easyiq/config_flow.py")
+    config_flow_path = Path("custom_components/aula_easyiq/config_flow.py")
     if not config_flow_path.exists():
         print("❌ config_flow.py not found")
         return False
@@ -102,7 +102,7 @@ def validate_sensor():
     """Validate sensor.py file."""
     print("🔍 Validating sensor.py...")
     
-    sensor_path = Path("custom_components/aula-easyiq/sensor.py")
+    sensor_path = Path("custom_components/aula_easyiq/sensor.py")
     if not sensor_path.exists():
         print("❌ sensor.py not found")
         return False
@@ -135,8 +135,8 @@ def validate_translations():
     """Validate translation files."""
     print("🔍 Validating translations...")
     
-    strings_path = Path("custom_components/aula-easyiq/strings.json")
-    translations_path = Path("custom_components/aula-easyiq/translations/en.json")
+    strings_path = Path("custom_components/aula_easyiq/strings.json")
+    translations_path = Path("custom_components/aula_easyiq/translations/en.json")
     
     if not strings_path.exists():
         print("❌ strings.json not found")
@@ -169,14 +169,14 @@ def validate_file_structure():
     print("🔍 Validating file structure...")
     
     required_files = [
-        "custom_components/aula-easyiq/__init__.py",
-        "custom_components/aula-easyiq/manifest.json",
-        "custom_components/aula-easyiq/config_flow.py",
-        "custom_components/aula-easyiq/sensor.py",
-        "custom_components/aula-easyiq/client.py",
-        "custom_components/aula-easyiq/const.py",
-        "custom_components/aula-easyiq/strings.json",
-        "custom_components/aula-easyiq/translations/en.json"
+        "custom_components/aula_easyiq/__init__.py",
+        "custom_components/aula_easyiq/manifest.json",
+        "custom_components/aula_easyiq/config_flow.py",
+        "custom_components/aula_easyiq/sensor.py",
+        "custom_components/aula_easyiq/client.py",
+        "custom_components/aula_easyiq/const.py",
+        "custom_components/aula_easyiq/strings.json",
+        "custom_components/aula_easyiq/translations/en.json"
     ]
     
     missing_files = []

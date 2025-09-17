@@ -26,16 +26,16 @@ def restart_integration():
         config_entries = response.json()
         
         # Find EasyIQ entries
-        aula-easyiq_entries = [entry for entry in config_entries if entry.get("domain") == "aula-easyiq"]
-        
-        if not aula-easyiq_entries:
+        aula_easyiq_entries = [entry for entry in config_entries if entry.get("domain") == "aula_easyiq"]
+
+        if not aula_easyiq_entries:
             print("No EasyIQ integration entries found")
             return
         
-        print(f"Found {len(aula-easyiq_entries)} EasyIQ integration(s)")
-        
+        print(f"Found {len(aula_easyiq_entries)} EasyIQ integration(s)")
+
         # Reload each EasyIQ entry
-        for entry in aula-easyiq_entries:
+        for entry in aula_easyiq_entries:
             entry_id = entry["entry_id"]
             print(f"Reloading EasyIQ integration: {entry_id}")
             

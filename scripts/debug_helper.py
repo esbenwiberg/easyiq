@@ -48,14 +48,14 @@ def check_file_structure():
     project_root = Path(__file__).parent.parent
     
     required_files = [
-        "custom_components/aula-easyiq/__init__.py",
-        "custom_components/aula-easyiq/manifest.json",
-        "custom_components/aula-easyiq/const.py",
-        "custom_components/aula-easyiq/client.py",
-        "custom_components/aula-easyiq/config_flow.py",
-        "custom_components/aula-easyiq/sensor.py",
-        "custom_components/aula-easyiq/binary_sensor.py",
-        "custom_components/aula-easyiq/calendar.py",
+        "custom_components/aula_easyiq/__init__.py",
+        "custom_components/aula_easyiq/manifest.json",
+        "custom_components/aula_easyiq/const.py",
+        "custom_components/aula_easyiq/client.py",
+        "custom_components/aula_easyiq/config_flow.py",
+        "custom_components/aula_easyiq/sensor.py",
+        "custom_components/aula_easyiq/binary_sensor.py",
+        "custom_components/aula_easyiq/calendar.py",
     ]
     
     all_good = True
@@ -77,9 +77,9 @@ def validate_json_files():
     project_root = Path(__file__).parent.parent
     
     json_files = [
-        "custom_components/aula-easyiq/manifest.json",
-        "custom_components/aula-easyiq/strings.json",
-        "custom_components/aula-easyiq/translations/en.json",
+        "custom_components/aula_easyiq/manifest.json",
+        "custom_components/aula_easyiq/strings.json",
+        "custom_components/aula_easyiq/translations/en.json",
     ]
     
     all_valid = True
@@ -106,13 +106,13 @@ def test_python_syntax():
     project_root = Path(__file__).parent.parent
     
     python_files = [
-        "custom_components/aula-easyiq/__init__.py",
-        "custom_components/aula-easyiq/const.py",
-        "custom_components/aula-easyiq/client.py",
-        "custom_components/aula-easyiq/config_flow.py",
-        "custom_components/aula-easyiq/sensor.py",
-        "custom_components/aula-easyiq/binary_sensor.py",
-        "custom_components/aula-easyiq/calendar.py",
+        "custom_components/aula_easyiq/__init__.py",
+        "custom_components/aula_easyiq/const.py",
+        "custom_components/aula_easyiq/client.py",
+        "custom_components/aula_easyiq/config_flow.py",
+        "custom_components/aula_easyiq/sensor.py",
+        "custom_components/aula_easyiq/binary_sensor.py",
+        "custom_components/aula_easyiq/calendar.py",
     ]
     
     all_valid = True
