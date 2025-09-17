@@ -1,7 +1,7 @@
 # EasyIQ Home Assistant Integration
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
-[![GitHub release](https://img.shields.io/github/release/esbenwiberg/easyiq.svg)]([https://github.com/esbenwiberg/easyiq/releases](https://github.com/esbenwiberg/easyiq/releases/tag/v0.2.0))
+[![GitHub release](https://img.shields.io/github/release/esbenwiberg/easyiq.svg)]([https://github.com/esbenwiberg/easyiq/releases/tag/v0.2.0]))
 [![License](https://img.shields.io/github/license/esbenwiberg/easyiq.svg)](LICENSE)
 
 A Home Assistant custom integration for EasyIQ school management system, providing access to student schedules, homework assignments, and presence information.
