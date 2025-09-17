@@ -1,5 +1,5 @@
 {
-  "domain": "aula-easyiq",
+  "domain": "aula_easyiq",
   "name": "Aula-EasyIQ",
   "codeowners": ["@esbenwiberg"],
   "config_flow": true,

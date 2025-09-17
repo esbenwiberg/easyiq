@@ -1,7 +1,7 @@
 {
   "name": "Aula-EasyIQ",
   "content_in_root": false,
-  "filename": "aula-easyiq.zip",
+  "filename": "aula_easyiq.zip",
   "country": ["DK"],
   "homeassistant": "2023.1.0",
   "render_readme": true
