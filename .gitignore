@@ -74,3 +74,6 @@ secrets.yaml
 ip_bans.yaml
 
 aula/
+
+# local debug
+ha-config/
