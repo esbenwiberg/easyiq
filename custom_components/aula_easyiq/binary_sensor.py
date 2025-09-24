@@ -157,15 +157,31 @@ class EasyIQPresenceBinarySensor(CoordinatorEntity, BinarySensorEntity):
                 "last_updated": presence_data.get("last_updated", "Unknown"),
             })
             
-            # Add current event if available
-            current_event = presence_data.get("current_event")
-            if current_event:
-                attributes.update({
-                    "current_course": current_event.get("course", ""),
-                    "current_activity": current_event.get("activity", ""),
-                    "current_start": current_event.get("start", ""),
-                    "current_end": current_event.get("end", ""),
-                })
+            # Add presence times and details
+            check_in_time = presence_data.get("check_in_time", "")
+            check_out_time = presence_data.get("check_out_time", "")
+            entry_time = presence_data.get("entry_time", "")
+            exit_time = presence_data.get("exit_time", "")
+            comment = presence_data.get("comment", "")
+            exit_with = presence_data.get("exit_with", "")
+            
+            if check_in_time:
+                attributes["check_in_time"] = check_in_time
+            
+            if check_out_time:
+                attributes["check_out_time"] = check_out_time
+            
+            if entry_time:
+                attributes["entry_time"] = entry_time
+            
+            if exit_time:
+                attributes["exit_time"] = exit_time
+            
+            if comment:
+                attributes["comment"] = comment
+            
+            if exit_with:
+                attributes["exit_with"] = exit_with
         
         return attributes
 

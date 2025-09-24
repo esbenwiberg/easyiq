@@ -779,107 +779,87 @@ class EasyIQClient:
             return {}
 
     async def get_presence(self, child_id: str) -> dict[str, Any]:
-        """Get presence data based on current schedule events."""
+        """Get presence data using the proper Aula API."""
         if not self._authenticated:
             _LOGGER.warning("Not authenticated - cannot fetch presence")
             return {}
         
         try:
-            # Get calendar events to determine current presence
-            events = await self._get_calendar_events(child_id)
-            if not events:
+            # Use the proper presence API endpoint
+            url = f"{API}{API_VERSION}/"
+            params = {
+                "method": "presence.getDailyOverview",
+                f"childIds[]": child_id
+            }
+            
+            _LOGGER.debug("Fetching presence data for child %s", child_id)
+            
+            async with self._session.get(url, params=params) as response:
+                if response.status != 200:
+                    _LOGGER.error("Failed to fetch presence data: HTTP %s", response.status)
+                    return {
+                        "status": "Error - API Failed",
+                        "status_code": 0,
+                        "last_updated": datetime.datetime.now().isoformat()
+                    }
+                
+                data = await response.json()
+                
+                if data.get("status", {}).get("code") != 0:
+                    _LOGGER.error("API returned error: %s", data.get("status", {}).get("message", "Unknown"))
+                    return {
+                        "status": "Error - API Error",
+                        "status_code": 0,
+                        "last_updated": datetime.datetime.now().isoformat()
+                    }
+                
+                # Extract presence data for this child
+                presence_entries = data.get("data", [])
+                for entry in presence_entries:
+                    if str(entry.get("institutionProfile", {}).get("id")) == str(child_id):
+                        # Extract the relevant information
+                        status_code = entry.get("status", 0)
+                        check_in_time = entry.get("checkInTime", "")
+                        check_out_time = entry.get("checkOutTime", "")
+                        entry_time = entry.get("entryTime", "")
+                        exit_time = entry.get("exitTime", "")
+                        comment = entry.get("comment", "")
+                        exit_with = entry.get("exitWith", "")
+                        
+                        # Format status text based on status code
+                        try:
+                            from .const import PRESENCE_STATUS
+                        except ImportError:
+                            # Fallback for testing
+                            PRESENCE_STATUS = {
+                                0: "IKKE KOMMET",      # Not arrived
+                                1: "SYG",              # Sick
+                                2: "FERIE/FRI",        # Holiday/Free
+                                3: "KOMMET/TIL STEDE", # Arrived/Present
+                                4: "PÅ TUR",           # On trip
+                                5: "SOVER",            # Sleeping
+                                8: "HENTET/GÅET",      # Picked up/Gone
+                            }
+                        status_text = PRESENCE_STATUS.get(status_code, f"Unknown Status ({status_code})")
+                        
+                        return {
+                            "status": status_text,
+                            "status_code": status_code,
+                            "check_in_time": check_in_time,
+                            "check_out_time": check_out_time,
+                            "entry_time": entry_time,
+                            "exit_time": exit_time,
+                            "comment": comment,
+                            "exit_with": exit_with,
+                            "last_updated": datetime.datetime.now().isoformat()
+                        }
+                
+                # Child not found in response
+                _LOGGER.warning("Child %s not found in presence data", child_id)
                 return {
-                    "status": "No Schedule Data",
+                    "status": "No Data",
                     "status_code": 0,
                     "last_updated": datetime.datetime.now().isoformat()
-                }
-            
-            # Filter for today's schedule events (itemType 9)
-            now = datetime.datetime.now()
-            today_str = now.strftime("%Y/%m/%d")
-            
-            current_events = []
-            for event in events:
-                if event.get("itemType") == 9:  # Schedule events
-                    event_start = event.get("start", "")
-                    if event_start.startswith(today_str):
-                        # Parse start and end times
-                        try:
-                            start_time_str = event_start  # Format: "2025/09/15 08:05"
-                            end_time_str = event.get("end", "")
-                            
-                            start_time = datetime.datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
-                            end_time = datetime.datetime.strptime(end_time_str, "%Y/%m/%d %H:%M")
-                            
-                            # Check if current time is within this event
-                            if start_time <= now <= end_time:
-                                current_events.append({
-                                    "course": event.get("courses", ""),
-                                    "activity": event.get("activities", ""),
-                                    "start": start_time_str,
-                                    "end": end_time_str,
-                                    "description": event.get("description", "")
-                                })
-                        except ValueError:
-                            continue
-            
-            # Determine presence status based on current events
-            if current_events:
-                # Child is currently in a scheduled class
-                current_event = current_events[0]  # Take the first if multiple
-                status = f"In Class - {current_event['course']}"
-                status_code = 3  # KOMMET/TIL STEDE (Present)
-                
-                return {
-                    "status": status,
-                    "status_code": status_code,
-                    "current_event": current_event,
-                    "last_updated": now.isoformat()
-                }
-            else:
-                # Check if there are any events today to determine if it's a school day
-                today_events = [e for e in events if e.get("itemType") == 9 and e.get("start", "").startswith(today_str)]
-                
-                if today_events:
-                    # It's a school day but no current class
-                    # Check if school day has started or ended
-                    earliest_start = None
-                    latest_end = None
-                    
-                    for event in today_events:
-                        try:
-                            start_time = datetime.datetime.strptime(event.get("start", ""), "%Y/%m/%d %H:%M")
-                            end_time = datetime.datetime.strptime(event.get("end", ""), "%Y/%m/%d %H:%M")
-                            
-                            if earliest_start is None or start_time < earliest_start:
-                                earliest_start = start_time
-                            if latest_end is None or end_time > latest_end:
-                                latest_end = end_time
-                        except ValueError:
-                            continue
-                    
-                    if earliest_start and latest_end:
-                        if now < earliest_start:
-                            status = "Before School"
-                            status_code = 0  # IKKE KOMMET (Not arrived)
-                        elif now > latest_end:
-                            status = "After School"
-                            status_code = 8  # HENTET/GÅET (Picked up/Gone)
-                        else:
-                            status = "Between Classes"
-                            status_code = 3  # KOMMET/TIL STEDE (Present)
-                    else:
-                        status = "School Day - No Schedule"
-                        status_code = 0
-                else:
-                    # No school today
-                    status = "No School Today"
-                    status_code = 2  # FERIE/FRI (Holiday/Free)
-                
-                return {
-                    "status": status,
-                    "status_code": status_code,
-                    "last_updated": now.isoformat()
                 }
                 
         except Exception as err:
