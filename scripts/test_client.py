@@ -122,11 +122,36 @@ async def main():
         
         # Test presence
         print(f"\n👤 Testing presence...")
-        presence_data = await client.get_presence(child_id)
+        presence_data = client.get_presence(child_id)
         
         if presence_data:
             print("✅ Presence data retrieved!")
-            print(f"Status: ({presence_data.get('status_code', 'Unknown')})")
+            print(f"Status: {presence_data.get('status', 'Unknown')} (Code: {presence_data.get('status_code', 'Unknown')})")
+            
+            # Show detailed presence information
+            if presence_data.get('check_in_time'):
+                print(f"  ✅ Arrived: {presence_data.get('check_in_time')}")
+            else:
+                print(f"  ⏳ Not arrived yet")
+                
+            if presence_data.get('check_out_time'):
+                print(f"  🚪 Left: {presence_data.get('check_out_time')}")
+            else:
+                print(f"  🏫 Still at school")
+                
+            if presence_data.get('entry_time'):
+                print(f"  📅 Planned arrival: {presence_data.get('entry_time')}")
+                
+            if presence_data.get('exit_time'):
+                print(f"  📅 Planned departure: {presence_data.get('exit_time')}")
+                
+            if presence_data.get('comment'):
+                print(f"  📝 Note: {presence_data.get('comment')}")
+                
+            if presence_data.get('exit_with'):
+                print(f"  👥 Picked up by: {presence_data.get('exit_with')}")
+                
+            print(f"  🕐 Last updated: {presence_data.get('last_updated', 'Unknown')}")
         else:
             print("❌ No presence data retrieved")
         

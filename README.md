@@ -87,28 +87,55 @@ easyiq:
 For each child in your account, the integration creates:
 
 ### Sensors
-- `sensor.easyiq_[child_name]_weekplan` - Weekly schedule information
-- `sensor.easyiq_[child_name]_presence` - Current presence status
+- `sensor.easyiq_[child_name]` - Main child sensor with weekly schedule overview
+- `sensor.easyiq_[child_name]_weekplan` - Detailed weekplan sensor with event data
 
-### Calendar
-- `calendar.easyiq_[child_name]_schedule` - School events and schedule
+### Binary Sensors
+- `binary_sensor.easyiq_[child_name]_present` - Presence status (ON = present at school, OFF = not present)
+- `binary_sensor.easyiq_messages` - Unread messages indicator (ON = has unread messages)
+
+### Calendar Entities
+- `calendar.easyiq_[child_name]_weekplan` - School schedule calendar with all events
+- `calendar.easyiq_[child_name]_homework` - Homework assignments calendar with due dates
 
 ### Attributes
 
 Each sensor provides detailed attributes:
 
-**Weekplan Sensor:**
-- `week`: Current week number
+**Main Child Sensor:**
+- `child_id`: Unique child identifier
+- `child_name`: Child's name
+- `week`: Current week description
 - `events_count`: Number of scheduled events
 - `html_content`: Formatted schedule HTML
-- `event_1_subject`, `event_1_time`, etc.: Individual event details
+- `event_1_subject`, `event_1_time`, `event_1_activities`: First event details
+- (up to 5 events with subject, time, and activities)
 
-**Presence Sensor:**
-- `status_code`: Numeric status code
-- `status_text`: Human-readable status
-- `location`: Current location (if available)
-- `arrival_time`: Check-in time
-- `departure_time`: Check-out time
+**Weekplan Sensor:**
+- `child_id`: Unique child identifier
+- `child_name`: Child's name
+- `weekplan_summary`: Detailed weekplan data with events array
+
+**Presence Binary Sensor:**
+- `status`: Current status text (e.g., "HENTET/GÅET", "KOMMET/TIL STEDE")
+- `status_code`: Numeric status code (0-8)
+- `status_description`: English description of status
+- `check_in_time`: Actual arrival time (e.g., "07:59:02")
+- `check_out_time`: Actual departure time (e.g., "15:07:12")
+- `entry_time`: Planned arrival time (e.g., "07:30:00")
+- `exit_time`: Planned departure time (e.g., "15:00:00")
+- `comment`: Additional notes (e.g., "Selvbestemmer 1400-1500")
+- `exit_with`: Who picked up the child (e.g., "Mormor")
+- `child_name`: Name of the child
+- `last_updated`: When the data was last updated
+
+**Message Binary Sensor:**
+- `unread_count`: Number of unread messages
+- `subject`: Subject of latest message
+- `text`: Content of latest message
+- `sender`: Sender of latest message
+- `coordinator_available`: Integration status
+- `last_update_success`: Last update status
 
 ## Usage Examples
 
@@ -119,12 +146,44 @@ automation:
   - alias: "Child arrived at school"
     trigger:
       - platform: state
-        entity_id: sensor.easyiq_child_presence
-        to: "KOMMET/TIL STEDE"
+        entity_id: binary_sensor.easyiq_child_present
+        to: "on"
+    condition:
+      - condition: template
+        value_template: >
+          {{ state_attr('binary_sensor.easyiq_child_present', 'status_code') == 3 }}
     action:
       - service: notify.mobile_app
         data:
-          message: "{{ trigger.to_state.attributes.child_name }} has arrived at school"
+          title: "School Arrival"
+          message: >
+            {{ state_attr('binary_sensor.easyiq_child_present', 'child_name') }}
+            arrived at school at {{ state_attr('binary_sensor.easyiq_child_present', 'check_in_time') }}
+```
+
+### Automation: Notify when child is picked up
+
+```yaml
+automation:
+  - alias: "Child picked up from school"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.easyiq_child_present
+        to: "off"
+    condition:
+      - condition: template
+        value_template: >
+          {{ state_attr('binary_sensor.easyiq_child_present', 'status_code') == 8 }}
+    action:
+      - service: notify.mobile_app
+        data:
+          title: "School Pickup"
+          message: >
+            {{ state_attr('binary_sensor.easyiq_child_present', 'child_name') }}
+            was picked up at {{ state_attr('binary_sensor.easyiq_child_present', 'check_out_time') }}
+            {% if state_attr('binary_sensor.easyiq_child_present', 'exit_with') %}
+            by {{ state_attr('binary_sensor.easyiq_child_present', 'exit_with') }}
+            {% endif %}
 ```
 
 ### Lovelace Card: Display weekly schedule
@@ -223,14 +282,38 @@ filter:
 type: glance
 title: School Attendance
 entities:
-  - entity: sensor.easyiq_child_presence
+  - entity: binary_sensor.easyiq_child_present
     name: Status
-  - entity: sensor.easyiq_child_presence
-    name: Location
-    attribute: location
-  - entity: sensor.easyiq_child_presence
-    name: Arrival
-    attribute: arrival_time
+    attribute: status
+  - entity: binary_sensor.easyiq_child_present
+    name: Arrived
+    attribute: check_in_time
+  - entity: binary_sensor.easyiq_child_present
+    name: Left
+    attribute: check_out_time
+  - entity: binary_sensor.easyiq_child_present
+    name: Comment
+    attribute: comment
+```
+
+### Dashboard: Danish-style presence card
+
+```yaml
+type: markdown
+content: |
+  ## Fremmøde Status
+  
+  **{{ state_attr('binary_sensor.easyiq_child_present', 'child_name') }}:**
+  - Status: {{ state_attr('binary_sensor.easyiq_child_present', 'status') }}
+  - Kom: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'check_in_time') }}
+  - Gik: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'check_out_time') }}
+  - Send hjem: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'exit_time') }}
+  {% if state_attr('binary_sensor.easyiq_child_present', 'comment') %}
+  - Bemærkninger: {{ state_attr('binary_sensor.easyiq_child_present', 'comment') }}
+  {% endif %}
+  {% if state_attr('binary_sensor.easyiq_child_present', 'exit_with') %}
+  - Hentet af: {{ state_attr('binary_sensor.easyiq_child_present', 'exit_with') }}
+  {% endif %}
 ```
 
 ### Template: Homework summary sensor
@@ -299,12 +382,32 @@ python scripts/test_client.py
 
 ## API Information
 
-This integration uses the EasyIQ CalendarGetWeekplanEvents API endpoint, which provides:
-- Weekly schedule data (itemType 9)
-- Homework assignments (itemType 4)
+This integration uses multiple Aula API endpoints:
+
+### Calendar Data
+- **EasyIQ CalendarGetWeekplanEvents**: Weekly schedule data (itemType 9) and homework assignments (itemType 4)
 - Event details including subjects, times, and descriptions
 
-The integration authenticates using your Aula credentials and retrieves data through the EasyIQ portal.
+### Presence Data
+- **presence.getDailyOverview**: Real-time presence information including:
+  - Current status (KOMMET/TIL STEDE, HENTET/GÅET, etc.)
+  - Check-in and check-out times
+  - Planned entry and exit times
+  - Comments and pickup information
+
+The integration authenticates using your Aula credentials and retrieves data through the official Aula API.
+
+## Detailed Examples
+
+For comprehensive usage examples covering all entities and features:
+- **[Complete Usage Examples](docs/complete_usage_examples.md)** - All entities with 50+ practical examples
+- **[Presence Usage Examples](docs/presence_usage_examples.md)** - Detailed presence feature guide
+
+### Quick Reference
+- **Weekplan Sensors**: Schedule data, event counts, HTML content
+- **Calendar Entities**: School events, homework assignments with Home Assistant calendar integration
+- **Presence Binary Sensors**: Real-time attendance with Danish status labels
+- **Message Binary Sensors**: Unread message notifications with content preview
 
 ## Supported Institutions
 

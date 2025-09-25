@@ -7,22 +7,44 @@ from typing import Any
 import datetime
 import json
 
+# Import dependencies with better error handling
+aiohttp = None
+BeautifulSoup = None
+pytz = None
+requests = None
+BS4 = None
+
+# Try to import each dependency individually
 try:
     import aiohttp
+except ImportError:
+    aiohttp = None
+
+try:
     from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
+
+try:
     import pytz
 except ImportError:
-    # For testing without Home Assistant dependencies
-    aiohttp = None
-    BeautifulSoup = None
     pytz = None
 
-# Also import requests for synchronous authentication (working approach)
+# For requests, try different approaches
 try:
     import requests
+except ImportError:
+    try:
+        # Try importing without any potential conflicts
+        import sys
+        import importlib
+        requests = importlib.import_module('requests')
+    except ImportError:
+        requests = None
+
+try:
     from bs4 import BeautifulSoup as BS4
 except ImportError:
-    requests = None
     BS4 = None
 
 try:
@@ -785,38 +807,59 @@ class EasyIQClient:
             return {}
         
         try:
+            # Get the child's actual ID for the API call (same as calendar API)
+            child_data = self._children_data.get(child_id)
+            if not child_data:
+                _LOGGER.error("Child data not found for %s", child_id)
+                return {
+                    "status": "Error - Child Not Found",
+                    "status_code": 0,
+                    "last_updated": datetime.datetime.now().isoformat()
+                }
+            
+            # Use the child's actual ID for the API call (this was the bug!)
+            actual_child_id = child_data.get("id", child_id)
+            _LOGGER.debug(f"Child {child_id} -> using actual_child_id: {actual_child_id} for presence API call")
+            
             # Use the proper presence API endpoint
             url = f"{API}{API_VERSION}/"
             params = {
                 "method": "presence.getDailyOverview",
-                f"childIds[]": child_id
+                f"childIds[]": actual_child_id
             }
             
-            _LOGGER.debug("Fetching presence data for child %s", child_id)
+            _LOGGER.debug("Fetching presence data for child %s (actual ID: %s)", child_id, actual_child_id)
             
-            async with self._session.get(url, params=params) as response:
-                if response.status != 200:
-                    _LOGGER.error("Failed to fetch presence data: HTTP %s", response.status)
-                    return {
-                        "status": "Error - API Failed",
-                        "status_code": 0,
-                        "last_updated": datetime.datetime.now().isoformat()
-                    }
-                
-                data = await response.json()
-                
-                if data.get("status", {}).get("code") != 0:
-                    _LOGGER.error("API returned error: %s", data.get("status", {}).get("message", "Unknown"))
-                    return {
-                        "status": "Error - API Error",
-                        "status_code": 0,
-                        "last_updated": datetime.datetime.now().isoformat()
-                    }
-                
-                # Extract presence data for this child
-                presence_entries = data.get("data", [])
-                for entry in presence_entries:
-                    if str(entry.get("institutionProfile", {}).get("id")) == str(child_id):
+            # Use synchronous session in thread pool to maintain authentication cookies
+            import asyncio
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self._session.get(url, params=params, verify=True)
+            )
+            
+            if response.status_code != 200:
+                _LOGGER.error("Failed to fetch presence data: HTTP %s", response.status_code)
+                return {
+                    "status": "Error - API Failed",
+                    "status_code": 0,
+                    "last_updated": datetime.datetime.now().isoformat()
+                }
+            
+            data = response.json()
+            
+            if data.get("status", {}).get("code") != 0:
+                _LOGGER.error("API returned error: %s", data.get("status", {}).get("message", "Unknown"))
+                return {
+                    "status": "Error - API Error",
+                    "status_code": 0,
+                    "last_updated": datetime.datetime.now().isoformat()
+                }
+            
+            # Extract presence data for this child
+            presence_entries = data.get("data", [])
+            for entry in presence_entries:
+                if str(entry.get("institutionProfile", {}).get("id")) == str(actual_child_id):
                         # Extract the relevant information
                         status_code = entry.get("status", 0)
                         check_in_time = entry.get("checkInTime", "")
@@ -853,15 +896,15 @@ class EasyIQClient:
                             "exit_with": exit_with,
                             "last_updated": datetime.datetime.now().isoformat()
                         }
-                
-                # Child not found in response
-                _LOGGER.warning("Child %s not found in presence data", child_id)
-                return {
-                    "status": "No Data",
-                    "status_code": 0,
-                    "last_updated": datetime.datetime.now().isoformat()
-                }
-                
+            
+            # Child not found in response
+            _LOGGER.warning("Child %s not found in presence data", child_id)
+            return {
+                "status": "No Data",
+                "status_code": 0,
+                "last_updated": datetime.datetime.now().isoformat()
+            }
+            
         except Exception as err:
             _LOGGER.error("Failed to get presence for child %s: %s", child_id, err)
             return {
