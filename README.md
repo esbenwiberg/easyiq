@@ -483,6 +483,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 This integration is not officially affiliated with EasyIQ or Aula. It's a community-developed integration that interfaces with publicly available APIs.
 
+## Acknowledgments
+
+This project is inspired by and builds upon the excellent work done in the [Aula integration](https://github.com/scaarup/aula) by @scaarup. Many of the authentication and API interaction patterns were adapted from that project.
+
 ## Support
 
 - 🐛 **Bug Reports**: [GitHub Issues](https://github.com/esbenwiberg/easyiq/issues)
