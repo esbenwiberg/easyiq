@@ -296,25 +296,54 @@ entities:
     attribute: comment
 ```
 
-### Dashboard: Danish-style presence card
+### Dashboard: Presence card with colored icons
 
 ```yaml
 type: markdown
 content: |
-  ## Fremmøde Status
+  {% set entity = 'binary_sensor.easyiq_child_present' %}
+  {% set status_code = state_attr(entity, 'status_code') %}
   
-  **{{ state_attr('binary_sensor.easyiq_child_present', 'child_name') }}:**
-  - Status: {{ state_attr('binary_sensor.easyiq_child_present', 'status') }}
-  - Kom: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'check_in_time') }}
-  - Gik: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'check_out_time') }}
-  - Send hjem: kl. {{ state_attr('binary_sensor.easyiq_child_present', 'exit_time') }}
-  {% if state_attr('binary_sensor.easyiq_child_present', 'comment') %}
-  - Bemærkninger: {{ state_attr('binary_sensor.easyiq_child_present', 'comment') }}
+  {% if status_code == 8 %}
+    {% set icon = '🏠' %}
+    {% set color = '#4CAF50' %}
+    {% set english_status = 'Picked up / Gone' %}
+  {% elif status_code == 3 %}
+    {% set icon = '🏫' %}
+    {% set color = '#2196F3' %}
+    {% set english_status = 'Present at school' %}
+  {% elif status_code == 0 %}
+    {% set icon = '❌' %}
+    {% set color = '#FF9800' %}
+    {% set english_status = 'Not arrived' %}
+  {% else %}
+    {% set icon = '❓' %}
+    {% set color = '#757575' %}
+    {% set english_status = 'Unknown' %}
   {% endif %}
-  {% if state_attr('binary_sensor.easyiq_child_present', 'exit_with') %}
-  - Hentet af: {{ state_attr('binary_sensor.easyiq_child_present', 'exit_with') }}
-  {% endif %}
+  
+  <div style="padding: 20px; border-radius: 12px; background: #f8f9fa; border-left: 4px solid {{ color }};">
+    <h3 style="margin: 0 0 16px 0; color: {{ color }};">
+      <span style="font-size: 24px; margin-right: 8px;">{{ icon }}</span>
+      {{ state_attr(entity, 'child_name') }}
+    </h3>
+    
+    <div style="font-size: 16px; line-height: 1.8;">
+      <div><strong style="color: {{ color }};">Status:</strong> {{ english_status }}</div>
+      <div><strong>Arrived:</strong> {{ state_attr(entity, 'check_in_time') or 'Not yet' }}</div>
+      <div><strong>Left:</strong> {{ state_attr(entity, 'check_out_time') or 'Still there' }}</div>
+      <div><strong>Planned pickup:</strong> {{ state_attr(entity, 'exit_time') or 'Not set' }}</div>
+      
+      {% if state_attr(entity, 'comment') %}
+      <div style="margin-top: 12px; padding: 12px; background: #fff3cd; border-radius: 6px;">
+        <strong>Notes:</strong> {{ state_attr(entity, 'comment') }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
 ```
+
+*See [Dashboard Presence Cards](docs/dashboard_presence_cards.md) for more card options and styling variations.*
 
 ### Template: Homework summary sensor
 
@@ -402,11 +431,12 @@ The integration authenticates using your Aula credentials and retrieves data thr
 For comprehensive usage examples covering all entities and features:
 - **[Complete Usage Examples](docs/complete_usage_examples.md)** - All entities with 50+ practical examples
 - **[Presence Usage Examples](docs/presence_usage_examples.md)** - Detailed presence feature guide
+- **[Dashboard Presence Cards](docs/dashboard_presence_cards.md)** - Beautiful presence cards with colored icons
 
 ### Quick Reference
 - **Weekplan Sensors**: Schedule data, event counts, HTML content
 - **Calendar Entities**: School events, homework assignments with Home Assistant calendar integration
-- **Presence Binary Sensors**: Real-time attendance with Danish status labels
+- **Presence Binary Sensors**: Real-time attendance with Danish status labels and colored dashboard cards
 - **Message Binary Sensors**: Unread message notifications with content preview
 
 ## Supported Institutions
