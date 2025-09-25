@@ -13,7 +13,7 @@ async def debug_login_page():
     print("=" * 50)
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
+        "User-Agent": "sh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
         "DNT": "1",

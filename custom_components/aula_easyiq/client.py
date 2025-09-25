@@ -144,7 +144,6 @@ class EasyIQClient:
             
             # Step 1: Get initial login page (simplified approach from working Aula client)
             headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
                 "DNT": "1",
@@ -168,7 +167,6 @@ class EasyIQClient:
             # Step 2: Submit IdP selection (simplified)
             headers = {
                 "Host": "broker.unilogin.dk",
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/112.0",
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
                 "Content-Type": "application/x-www-form-urlencoded",
