@@ -1019,6 +1019,106 @@ class EasyIQClient:
             _LOGGER.error("Failed to update data: %s", err)
             raise
 
+    async def update_data_selective(
+        self,
+        update_weekplan: bool = True,
+        update_homework: bool = True,
+        update_presence: bool = True,
+        update_messages: bool = True
+    ) -> None:
+        """Update specific data types from the API based on flags."""
+        try:
+            # First authenticate if not already authenticated
+            if not await self.authenticate():
+                _LOGGER.error("Failed to authenticate - cannot update data")
+                return
+            
+            # Always update children data (lightweight operation)
+            self.children = await self.get_children()
+            
+            # Initialize data structures if they don't exist
+            if not hasattr(self, 'weekplan_data'):
+                self.weekplan_data = {}
+            if not hasattr(self, 'homework_data'):
+                self.homework_data = {}
+            if not hasattr(self, 'presence_data'):
+                self.presence_data = {}
+            
+            # Update data selectively for each child
+            for child in self.children:
+                child_id = child.get("id", "")
+                child_name = child.get("name", "Unknown")
+                if child_id:
+                    _LOGGER.debug(f"Selective update for child: {child_name} (ID: {child_id})")
+                    _LOGGER.debug(f"  Flags - weekplan: {update_weekplan}, homework: {update_homework}, presence: {update_presence}")
+                    
+                    # Update weekplan and/or homework data if requested
+                    if update_weekplan or update_homework:
+                        try:
+                            business_day_events = await self.get_calendar_events_for_business_days(child_id, 5)
+                            
+                            if update_weekplan:
+                                # Separate and store weekplan events
+                                weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                                self.weekplan_data[child_id] = {
+                                    "week": f"Next 5 Business Days",
+                                    "events": weekplan_events,
+                                    "html_content": self._build_weekplan_html(weekplan_events),
+                                    "raw_data": business_day_events,
+                                    "last_updated": datetime.datetime.now().isoformat()
+                                }
+                                _LOGGER.debug(f"Updated weekplan for {child_name}: {len(weekplan_events)} events")
+                            
+                            if update_homework:
+                                # Separate and store homework events
+                                homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                                homework_assignments = []
+                                for event in homework_events:
+                                    assignment_data = {
+                                        "title": event.get("courses", ""),
+                                        "subject": event.get("courses", ""),
+                                        "description": event.get("description", ""),
+                                        "start_time": event.get("start", ""),
+                                        "activities": event.get("activities", ""),
+                                        "raw_data": event
+                                    }
+                                    homework_assignments.append(assignment_data)
+                                
+                                self.homework_data[child_id] = {
+                                    "week": f"Next 5 Business Days",
+                                    "assignments": homework_assignments,
+                                    "html_content": self._build_homework_html(homework_assignments),
+                                    "raw_data": business_day_events,
+                                    "last_updated": datetime.datetime.now().isoformat()
+                                }
+                                _LOGGER.debug(f"Updated homework for {child_name}: {len(homework_events)} assignments")
+                                
+                        except Exception as calendar_err:
+                            _LOGGER.error(f"Failed to update calendar data for child {child_name}: {calendar_err}")
+                    
+                    # Update presence data if requested
+                    if update_presence:
+                        try:
+                            self.presence_data[child_id] = await self.get_presence(child_id)
+                            _LOGGER.debug(f"Updated presence for {child_name}")
+                        except Exception as presence_err:
+                            _LOGGER.error(f"Failed to update presence for child {child_name}: {presence_err}")
+            
+            # Update messages if requested
+            if update_messages:
+                try:
+                    self.message = await self.get_messages()
+                    self.unread_messages = self.message.get("unread_count", 0) if isinstance(self.message, dict) else 0
+                    _LOGGER.debug(f"Updated messages: {self.unread_messages} unread")
+                except Exception as messages_err:
+                    _LOGGER.error(f"Failed to update messages: {messages_err}")
+            
+            _LOGGER.debug("Selective data update completed successfully")
+            
+        except Exception as err:
+            _LOGGER.error("Failed to update data selectively: %s", err)
+            raise
+
     def _build_weekplan_html(self, weekplan_events: list[dict[str, Any]]) -> str:
         """Build HTML content for weekplan events."""
         html = "<h2>Next 5 Business Days - Schedule</h2>"

@@ -37,7 +37,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     
     # Create the data update coordinator
-    coordinator = EasyIQDataUpdateCoordinator(hass, client)
+    coordinator = EasyIQDataUpdateCoordinator(hass, client, entry)
     
     # Perform initial data fetch
     try:

@@ -19,7 +19,14 @@ from homeassistant.helpers.update_coordinator import (
 from .client import EasyIQClient
 from .const import (
     CONF_WEEKPLAN,
-    DEFAULT_SCAN_INTERVAL,
+    CONF_WEEKPLAN_INTERVAL,
+    CONF_HOMEWORK_INTERVAL,
+    CONF_PRESENCE_INTERVAL,
+    CONF_MESSAGES_INTERVAL,
+    DEFAULT_WEEKPLAN_INTERVAL,
+    DEFAULT_HOMEWORK_INTERVAL,
+    DEFAULT_PRESENCE_INTERVAL,
+    DEFAULT_MESSAGES_INTERVAL,
     DOMAIN,
 )
 
@@ -65,22 +72,93 @@ async def async_setup_entry(
 
 
 class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
-    """Class to manage fetching data from the EasyIQ API."""
+    """Class to manage fetching data from the EasyIQ API with configurable intervals."""
 
-    def __init__(self, hass: HomeAssistant, client: EasyIQClient) -> None:
+    def __init__(self, hass: HomeAssistant, client: EasyIQClient, config_entry) -> None:
         """Initialize."""
         self.client = client
+        self.config_entry = config_entry
+        
+        # Get update intervals from config
+        options = config_entry.options
+        self.update_intervals = {
+            "weekplan": options.get(CONF_WEEKPLAN_INTERVAL, DEFAULT_WEEKPLAN_INTERVAL),
+            "homework": options.get(CONF_HOMEWORK_INTERVAL, DEFAULT_HOMEWORK_INTERVAL),
+            "presence": options.get(CONF_PRESENCE_INTERVAL, DEFAULT_PRESENCE_INTERVAL),
+            "messages": options.get(CONF_MESSAGES_INTERVAL, DEFAULT_MESSAGES_INTERVAL),
+        }
+        
+        # Track last update times for each data type
+        self.last_updates = {
+            "weekplan": None,
+            "homework": None,
+            "presence": None,
+            "messages": None,
+        }
+        
+        # Use the shortest interval as the coordinator's base interval
+        min_interval = min(self.update_intervals.values())
+        
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(seconds=min_interval),
         )
+        
+        _LOGGER.info(f"EasyIQ coordinator initialized with intervals: {self.update_intervals}")
+
+    def _should_update_data_type(self, data_type: str) -> bool:
+        """Check if a specific data type should be updated based on its interval."""
+        if data_type not in self.update_intervals:
+            return True
+            
+        last_update = self.last_updates.get(data_type)
+        if last_update is None:
+            return True
+            
+        interval = self.update_intervals[data_type]
+        time_since_update = (datetime.now() - last_update).total_seconds()
+        
+        should_update = time_since_update >= interval
+        if should_update:
+            _LOGGER.debug(f"Should update {data_type}: {time_since_update}s >= {interval}s")
+        
+        return should_update
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Update data via library."""
+        """Update data via library with selective updates based on intervals."""
+        from datetime import datetime
+        
         try:
-            await self.client.update_data()
+            # Determine which data types need updating
+            update_weekplan = self._should_update_data_type("weekplan")
+            update_homework = self._should_update_data_type("homework")
+            update_presence = self._should_update_data_type("presence")
+            update_messages = self._should_update_data_type("messages")
+            
+            _LOGGER.debug(f"Update flags - weekplan: {update_weekplan}, homework: {update_homework}, "
+                         f"presence: {update_presence}, messages: {update_messages}")
+            
+            # Update only the data types that need updating
+            await self.client.update_data_selective(
+                update_weekplan=update_weekplan,
+                update_homework=update_homework,
+                update_presence=update_presence,
+                update_messages=update_messages
+            )
+            
+            # Update last update times for updated data types
+            current_time = datetime.now()
+            if update_weekplan:
+                self.last_updates["weekplan"] = current_time
+            if update_homework:
+                self.last_updates["homework"] = current_time
+            if update_presence:
+                self.last_updates["presence"] = current_time
+            if update_messages:
+                self.last_updates["messages"] = current_time
+            
             data = {
                 "children": self.client.children,
                 "unread_messages": self.client.unread_messages,
@@ -88,6 +166,8 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
                 "weekplan_data": self.client.weekplan_data,
                 "homework_data": getattr(self.client, 'homework_data', {}),
                 "presence_data": getattr(self.client, 'presence_data', {}),
+                "last_updates": self.last_updates.copy(),
+                "update_intervals": self.update_intervals.copy(),
             }
             _LOGGER.debug(f"Coordinator updated data successfully: {len(data['children'])} children")
             return data
@@ -101,6 +181,8 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
                 "weekplan_data": getattr(self.client, 'weekplan_data', {}),
                 "homework_data": getattr(self.client, 'homework_data', {}),
                 "presence_data": getattr(self.client, 'presence_data', {}),
+                "last_updates": self.last_updates.copy(),
+                "update_intervals": self.update_intervals.copy(),
             }
 
 

@@ -68,6 +68,28 @@ Want to contribute or test locally? See **[DEVELOPMENT_SETUP.md](DEVELOPMENT_SET
    - Homework (Lektier)
    - Presence Status
 
+### Configuring Update Intervals
+
+After initial setup, you can configure individual update intervals for different data types:
+
+1. Go to **Settings** → **Devices & Services**
+2. Find your EasyIQ integration
+3. Click **Configure** (or the three dots → **Configure**)
+4. Adjust the update intervals (in seconds):
+   - **Weekplan Update Interval**: How often to fetch schedule data (default: 900s / 15 minutes)
+   - **Homework Update Interval**: How often to fetch homework assignments (default: 900s / 15 minutes)
+   - **Presence Update Interval**: How often to check attendance status (default: 300s / 5 minutes)
+   - **Messages Update Interval**: How often to check for new messages (default: 300s / 5 minutes)
+
+**Note**: All intervals must be between 60 seconds (1 minute) and 3600 seconds (1 hour). The integration will use the shortest configured interval as its base update frequency and selectively update different data types based on their individual intervals.
+
+#### Recommended Interval Settings
+
+- **High Priority Data** (Presence, Messages): 300-600 seconds (5-10 minutes)
+- **Medium Priority Data** (Weekplan, Homework): 900-1800 seconds (15-30 minutes)
+
+This approach reduces API load while keeping important data fresh. The defaults prioritize presence monitoring and message notifications while reducing the frequency of schedule and homework updates.
+
 ### Manual Configuration (YAML)
 
 Add to your `configuration.yaml`:
@@ -411,20 +433,51 @@ python scripts/test_client.py
 
 ## API Information
 
-This integration uses multiple Aula API endpoints:
+This integration uses **two different API systems** depending on the data type:
 
-### Calendar Data
-- **EasyIQ CalendarGetWeekplanEvents**: Weekly schedule data (itemType 9) and homework assignments (itemType 4)
-- Event details including subjects, times, and descriptions
+### EasyIQ API (for Schedule Data)
+- **Weekplan Data**: Uses EasyIQ CalendarGetWeekplanEvents endpoint (itemType 9)
+- **Homework Data**: Uses EasyIQ CalendarGetWeekplanEvents endpoint (itemType 4)
+- Accessed through `https://skoleportal.easyiqcloud.dk/Calendar/CalendarGetWeekplanEvents`
+- Requires EasyIQ widget authentication tokens from Aula
 
-### Presence Data
-- **presence.getDailyOverview**: Real-time presence information including:
+### Aula API (for Real-time Data)
+- **Presence Data**: Uses `presence.getDailyOverview` endpoint for real-time attendance:
   - Current status (KOMMET/TIL STEDE, HENTET/GÅET, etc.)
   - Check-in and check-out times
   - Planned entry and exit times
   - Comments and pickup information
+- **Messages Data**: Uses Aula messaging endpoints for unread message counts and content
+- Accessed through `https://www.aula.dk/api/v{version}` endpoints
+- Uses direct Aula session authentication
 
-The integration authenticates using your Aula credentials and retrieves data through the official Aula API.
+The integration authenticates using your Aula credentials and automatically handles both API systems seamlessly.
+
+### API Query Frequency
+
+The integration supports **configurable update intervals** for each data type, with intelligent API routing:
+
+**Default Update Intervals:**
+- **Presence Data** (Aula API): Every 5 minutes (300 seconds)
+- **Messages** (Aula API): Every 5 minutes (300 seconds)
+- **Weekplan Data** (EasyIQ API): Every 15 minutes (900 seconds)
+- **Homework Data** (EasyIQ API): Every 15 minutes (900 seconds)
+
+**Smart Polling System:**
+- The coordinator automatically uses the **shortest configured interval** (5 minutes) as its base frequency
+- Individual data types are updated only when their specific interval has elapsed
+- **Aula API calls** (presence, messages) happen more frequently for real-time data
+- **EasyIQ API calls** (weekplan, homework) happen less frequently for static schedule data
+- This reduces unnecessary API load while prioritizing time-sensitive information
+
+**Example API Load** (with 2 children and default intervals):
+- **Presence** (Aula API): ~24 calls/hour (every 5 minutes)
+- **Messages** (Aula API): ~12 calls/hour (every 5 minutes)
+- **Weekplan** (EasyIQ API): ~8 calls/hour (every 15 minutes)
+- **Homework** (EasyIQ API): ~8 calls/hour (every 15 minutes)
+- **Total**: ~52 API calls/hour (vs. ~96 with fixed 5-minute intervals)
+
+This represents a **46% reduction** in total API calls while providing optimal update frequencies for different data priorities.
 
 ## Detailed Examples
 

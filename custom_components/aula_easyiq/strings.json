@@ -32,9 +32,13 @@
           "schoolschedule": "School schedules as calendar entities",
           "weekplan": "Weekplans as sensor attributes",
           "homework": "Homework as sensor attributes",
-          "presence": "Presence/attendance as sensor attributes"
+          "presence": "Presence/attendance as sensor attributes",
+          "weekplan_interval": "Weekplan update interval (seconds)",
+          "homework_interval": "Homework update interval (seconds)",
+          "presence_interval": "Presence update interval (seconds)",
+          "messages_interval": "Messages update interval (seconds)"
         },
-        "description": "Configure which EasyIQ features to enable",
+        "description": "Configure which EasyIQ features to enable and their update intervals",
         "title": "EasyIQ Options"
       }
     }

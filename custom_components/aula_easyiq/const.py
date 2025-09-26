@@ -42,9 +42,18 @@ CONF_PRESENCE = "presence"
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 
+# Update interval configuration keys
+CONF_WEEKPLAN_INTERVAL = "weekplan_interval"
+CONF_HOMEWORK_INTERVAL = "homework_interval"
+CONF_PRESENCE_INTERVAL = "presence_interval"
+CONF_MESSAGES_INTERVAL = "messages_interval"
+
 # Default configuration
 DEFAULT_NAME = "EasyIQ"
-DEFAULT_SCAN_INTERVAL = 300  # 5 minutes
+DEFAULT_WEEKPLAN_INTERVAL = 900  # 15 minutes
+DEFAULT_HOMEWORK_INTERVAL = 900  # 15 minutes
+DEFAULT_PRESENCE_INTERVAL = 300  # 5 minutes
+DEFAULT_MESSAGES_INTERVAL = 300  # 5 minutes
 
 # Presence status codes
 PRESENCE_STATUS = {
