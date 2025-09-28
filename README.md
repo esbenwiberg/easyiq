@@ -68,27 +68,41 @@ Want to contribute or test locally? See **[DEVELOPMENT_SETUP.md](DEVELOPMENT_SET
    - Homework (Lektier)
    - Presence Status
 
-### Configuring Update Intervals
+### Configuring Update Intervals and Data Range
 
-After initial setup, you can configure individual update intervals for different data types:
+After initial setup, you can configure individual update intervals and data range for different data types:
 
 1. Go to **Settings** → **Devices & Services**
 2. Find your EasyIQ integration
 3. Click **Configure** (or the three dots → **Configure**)
-4. Adjust the update intervals (in seconds):
+4. Adjust the settings:
+
+#### Update Intervals (in seconds)
    - **Weekplan Update Interval**: How often to fetch schedule data (default: 900s / 15 minutes)
    - **Homework Update Interval**: How often to fetch homework assignments (default: 900s / 15 minutes)
    - **Presence Update Interval**: How often to check attendance status (default: 300s / 5 minutes)
    - **Messages Update Interval**: How often to check for new messages (default: 300s / 5 minutes)
 
-**Note**: All intervals must be between 60 seconds (1 minute) and 3600 seconds (1 hour). The integration will use the shortest configured interval as its base update frequency and selectively update different data types based on their individual intervals.
+#### Data Range (business days forward)
+   - **Weekplan Days Forward**: How many business days of schedule to fetch (default: 5 days, range: 1-14)
+   - **Homework Days Forward**: How many business days of homework to fetch (default: 5 days, range: 1-14)
 
-#### Recommended Interval Settings
+**Notes**:
+- All intervals must be between 60 seconds (1 minute) and 3600 seconds (1 hour)
+- Days forward settings only count business days (Monday-Friday), weekends are automatically excluded
+- The integration will use the shortest configured interval as its base update frequency and selectively update different data types based on their individual intervals
 
+#### Recommended Settings
+
+**Update Intervals:**
 - **High Priority Data** (Presence, Messages): 300-600 seconds (5-10 minutes)
 - **Medium Priority Data** (Weekplan, Homework): 900-1800 seconds (15-30 minutes)
 
-This approach reduces API load while keeping important data fresh. The defaults prioritize presence monitoring and message notifications while reducing the frequency of schedule and homework updates.
+**Days Forward:**
+- **Weekplan**: 5-7 days for weekly planning, 3 days for daily focus
+- **Homework**: 5-10 days for better assignment planning, 3 days for immediate focus
+
+This approach reduces API load while keeping important data fresh. The defaults prioritize presence monitoring and message notifications while reducing the frequency of schedule and homework updates. Adjust the days forward based on your planning needs - fewer days for faster updates and daily focus, more days for better long-term planning.
 
 ### Manual Configuration (YAML)
 

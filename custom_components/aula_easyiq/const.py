@@ -48,12 +48,18 @@ CONF_HOMEWORK_INTERVAL = "homework_interval"
 CONF_PRESENCE_INTERVAL = "presence_interval"
 CONF_MESSAGES_INTERVAL = "messages_interval"
 
+# Days forward configuration keys
+CONF_WEEKPLAN_DAYS = "weekplan_days"
+CONF_HOMEWORK_DAYS = "homework_days"
+
 # Default configuration
 DEFAULT_NAME = "EasyIQ"
 DEFAULT_WEEKPLAN_INTERVAL = 900  # 15 minutes
 DEFAULT_HOMEWORK_INTERVAL = 900  # 15 minutes
 DEFAULT_PRESENCE_INTERVAL = 300  # 5 minutes
 DEFAULT_MESSAGES_INTERVAL = 300  # 5 minutes
+DEFAULT_WEEKPLAN_DAYS = 5  # 5 business days
+DEFAULT_HOMEWORK_DAYS = 5  # 5 business days
 
 # Presence status codes
 PRESENCE_STATUS = {

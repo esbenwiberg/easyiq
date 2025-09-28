@@ -911,7 +911,7 @@ class EasyIQClient:
                 "last_updated": datetime.datetime.now().isoformat()
             }
 
-    async def update_data(self) -> None:
+    async def update_data(self, weekplan_days: int = 5, homework_days: int = 5) -> None:
         """Update all data from the API using business days approach."""
         try:
             # First authenticate if not already authenticated
@@ -942,19 +942,26 @@ class EasyIQClient:
                         _LOGGER.error(f"  No child data found for {child_name} (ID: {child_id})")
                         _LOGGER.error(f"  Available child data keys: {list(self._children_data.keys())}")
                     
-                    # Get events for next 5 business days instead of just current week
+                    # Get events for configured number of business days
                     try:
-                        business_day_events = await self.get_calendar_events_for_business_days(child_id, 5)
+                        # Use the maximum of weekplan_days and homework_days to get all needed events
+                        max_days = max(weekplan_days, homework_days)
+                        business_day_events = await self.get_calendar_events_for_business_days(child_id, max_days)
                         
                         # Separate weekplan and homework events
-                        weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
-                        homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                        all_weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                        all_homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                        
+                        # Filter events based on configured days
+                        weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
+                        homework_events = self._filter_events_by_days(all_homework_events, homework_days)
                         
                         # Store weekplan data
+                        weekplan_desc = f"Next {weekplan_days} Business Day{'s' if weekplan_days != 1 else ''}"
                         self.weekplan_data[child_id] = {
-                            "week": f"Next 5 Business Days",
+                            "week": weekplan_desc,
                             "events": weekplan_events,
-                            "html_content": self._build_weekplan_html(weekplan_events),
+                            "html_content": self._build_weekplan_html(weekplan_events, weekplan_days),
                             "raw_data": business_day_events
                         }
                         
@@ -971,10 +978,11 @@ class EasyIQClient:
                             }
                             homework_assignments.append(assignment_data)
                         
+                        homework_desc = f"Next {homework_days} Business Day{'s' if homework_days != 1 else ''}"
                         self.homework_data[child_id] = {
-                            "week": f"Next 5 Business Days",
+                            "week": homework_desc,
                             "assignments": homework_assignments,
-                            "html_content": self._build_homework_html(homework_assignments),
+                            "html_content": self._build_homework_html(homework_assignments, homework_days),
                             "raw_data": business_day_events
                         }
                         
@@ -1024,7 +1032,9 @@ class EasyIQClient:
         update_weekplan: bool = True,
         update_homework: bool = True,
         update_presence: bool = True,
-        update_messages: bool = True
+        update_messages: bool = True,
+        weekplan_days: int = 5,
+        homework_days: int = 5
     ) -> None:
         """Update specific data types from the API based on flags."""
         try:
@@ -1051,27 +1061,33 @@ class EasyIQClient:
                 if child_id:
                     _LOGGER.debug(f"Selective update for child: {child_name} (ID: {child_id})")
                     _LOGGER.debug(f"  Flags - weekplan: {update_weekplan}, homework: {update_homework}, presence: {update_presence}")
+                    _LOGGER.debug(f"  Days - weekplan: {weekplan_days}, homework: {homework_days}")
                     
                     # Update weekplan and/or homework data if requested
                     if update_weekplan or update_homework:
                         try:
-                            business_day_events = await self.get_calendar_events_for_business_days(child_id, 5)
+                            # Use the maximum of weekplan_days and homework_days to get all needed events
+                            max_days = max(weekplan_days, homework_days)
+                            business_day_events = await self.get_calendar_events_for_business_days(child_id, max_days)
                             
                             if update_weekplan:
-                                # Separate and store weekplan events
-                                weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                                # Separate and filter weekplan events
+                                all_weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                                weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
+                                weekplan_desc = f"Next {weekplan_days} Business Day{'s' if weekplan_days != 1 else ''}"
                                 self.weekplan_data[child_id] = {
-                                    "week": f"Next 5 Business Days",
+                                    "week": weekplan_desc,
                                     "events": weekplan_events,
-                                    "html_content": self._build_weekplan_html(weekplan_events),
+                                    "html_content": self._build_weekplan_html(weekplan_events, weekplan_days),
                                     "raw_data": business_day_events,
                                     "last_updated": datetime.datetime.now().isoformat()
                                 }
                                 _LOGGER.debug(f"Updated weekplan for {child_name}: {len(weekplan_events)} events")
                             
                             if update_homework:
-                                # Separate and store homework events
-                                homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                                # Separate and filter homework events
+                                all_homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                                homework_events = self._filter_events_by_days(all_homework_events, homework_days)
                                 homework_assignments = []
                                 for event in homework_events:
                                     assignment_data = {
@@ -1084,10 +1100,11 @@ class EasyIQClient:
                                     }
                                     homework_assignments.append(assignment_data)
                                 
+                                homework_desc = f"Next {homework_days} Business Day{'s' if homework_days != 1 else ''}"
                                 self.homework_data[child_id] = {
-                                    "week": f"Next 5 Business Days",
+                                    "week": homework_desc,
                                     "assignments": homework_assignments,
-                                    "html_content": self._build_homework_html(homework_assignments),
+                                    "html_content": self._build_homework_html(homework_assignments, homework_days),
                                     "raw_data": business_day_events,
                                     "last_updated": datetime.datetime.now().isoformat()
                                 }
@@ -1119,9 +1136,41 @@ class EasyIQClient:
             _LOGGER.error("Failed to update data selectively: %s", err)
             raise
 
-    def _build_weekplan_html(self, weekplan_events: list[dict[str, Any]]) -> str:
+    def _filter_events_by_days(self, events: list[dict[str, Any]], days: int) -> list[dict[str, Any]]:
+        """Filter events to only include those within the specified number of business days."""
+        if not events or days <= 0:
+            return []
+        
+        # Get current date
+        current_date = datetime.datetime.now().date()
+        
+        # Calculate the target business days
+        business_days_found = 0
+        check_date = current_date
+        target_dates = []
+        
+        while business_days_found < days:
+            # Skip weekends (Saturday=5, Sunday=6)
+            if check_date.weekday() < 5:  # Monday=0 to Friday=4
+                target_dates.append(check_date.strftime("%Y/%m/%d"))
+                business_days_found += 1
+            check_date += datetime.timedelta(days=1)
+        
+        # Filter events to only include those on target dates
+        filtered_events = []
+        for event in events:
+            start_time = event.get("start", "")
+            if start_time:
+                date_part = start_time.split(" ")[0]  # Get "2025/09/15" part
+                if date_part in target_dates:
+                    filtered_events.append(event)
+        
+        return filtered_events
+
+    def _build_weekplan_html(self, weekplan_events: list[dict[str, Any]], days: int = 5) -> str:
         """Build HTML content for weekplan events."""
-        html = "<h2>Next 5 Business Days - Schedule</h2>"
+        day_text = f"{days} Business Day{'s' if days != 1 else ''}"
+        html = f"<h2>Next {day_text} - Schedule</h2>"
         
         if not weekplan_events:
             html += "<p>No scheduled events found.</p>"
@@ -1173,9 +1222,10 @@ class EasyIQClient:
         
         return html
     
-    def _build_homework_html(self, homework_assignments: list[dict[str, Any]]) -> str:
+    def _build_homework_html(self, homework_assignments: list[dict[str, Any]], days: int = 5) -> str:
         """Build HTML content for homework assignments."""
-        html = "<h2>Next 5 Business Days - Homework</h2>"
+        day_text = f"{days} Business Day{'s' if days != 1 else ''}"
+        html = f"<h2>Next {day_text} - Homework</h2>"
         
         if not homework_assignments:
             html += "<p>No homework assignments found.</p>"

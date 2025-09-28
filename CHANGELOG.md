@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2025-09-28
+
+### Added
+- **Configurable Data Range**: New configuration options for how many days forward to fetch data
+  - Weekplan days forward (default: 5 days, range: 1-14 business days)
+  - Homework days forward (default: 5 days, range: 1-14 business days)
+- **Independent Day Settings**: Weekplan and homework can have different day ranges
+- **Business Days Filtering**: Automatically excludes weekends from day counting
+- **Dynamic Descriptions**: Sensor descriptions update based on configuration (e.g., "Next 3 Business Days")
+
+### Changed
+- **Client Implementation**: Enhanced to support configurable day ranges instead of hardcoded 5-day limit
+- **Data Filtering**: Added intelligent business day filtering with `_filter_events_by_days()` method
+- **HTML Builders**: Updated to show dynamic day descriptions in weekplan and homework content
+- **Configuration UI**: Added new day range options with validation (1-14 days)
+
+### Improved
+- **Flexibility**: Users can configure shorter periods (1-3 days) for daily focus or longer periods (7-14 days) for better planning
+- **Performance**: Fewer days means less data processing and storage
+- **User Experience**: Clear configuration labels and comprehensive documentation
+- **Backward Compatibility**: Maintains 5-day default for existing installations
+
+### Fixed
+- **Test Script**: Fixed missing `await` keyword in presence data retrieval test
+
 ## [0.3.0] - 2025-09-26
 
 ### Added

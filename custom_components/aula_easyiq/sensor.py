@@ -23,10 +23,14 @@ from .const import (
     CONF_HOMEWORK_INTERVAL,
     CONF_PRESENCE_INTERVAL,
     CONF_MESSAGES_INTERVAL,
+    CONF_WEEKPLAN_DAYS,
+    CONF_HOMEWORK_DAYS,
     DEFAULT_WEEKPLAN_INTERVAL,
     DEFAULT_HOMEWORK_INTERVAL,
     DEFAULT_PRESENCE_INTERVAL,
     DEFAULT_MESSAGES_INTERVAL,
+    DEFAULT_WEEKPLAN_DAYS,
+    DEFAULT_HOMEWORK_DAYS,
     DOMAIN,
 )
 
@@ -88,6 +92,12 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
             "messages": options.get(CONF_MESSAGES_INTERVAL, DEFAULT_MESSAGES_INTERVAL),
         }
         
+        # Get days configuration from config
+        self.days_config = {
+            "weekplan": options.get(CONF_WEEKPLAN_DAYS, DEFAULT_WEEKPLAN_DAYS),
+            "homework": options.get(CONF_HOMEWORK_DAYS, DEFAULT_HOMEWORK_DAYS),
+        }
+        
         # Track last update times for each data type
         self.last_updates = {
             "weekplan": None,
@@ -145,7 +155,9 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
                 update_weekplan=update_weekplan,
                 update_homework=update_homework,
                 update_presence=update_presence,
-                update_messages=update_messages
+                update_messages=update_messages,
+                weekplan_days=self.days_config["weekplan"],
+                homework_days=self.days_config["homework"]
             )
             
             # Update last update times for updated data types

@@ -122,7 +122,7 @@ async def main():
         
         # Test presence
         print(f"\n👤 Testing presence...")
-        presence_data = client.get_presence(child_id)
+        presence_data = await client.get_presence(child_id)
         
         if presence_data:
             print("✅ Presence data retrieved!")
