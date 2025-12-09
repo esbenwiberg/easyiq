@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
@@ -116,30 +116,41 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=timedelta(seconds=min_interval),
         )
         
-        _LOGGER.info(f"EasyIQ coordinator initialized with intervals: {self.update_intervals}")
+        _LOGGER.info(
+            f"EasyIQ coordinator initialized with base interval: {min_interval}s, "
+            f"individual intervals: {self.update_intervals}, "
+            f"days config: {self.days_config}"
+        )
 
     def _should_update_data_type(self, data_type: str) -> bool:
         """Check if a specific data type should be updated based on its interval."""
-        if data_type not in self.update_intervals:
-            return True
+        try:
+            if data_type not in self.update_intervals:
+                _LOGGER.debug(f"Data type {data_type} not in update_intervals, updating by default")
+                return True
+                
+            last_update = self.last_updates.get(data_type)
+            if last_update is None:
+                _LOGGER.debug(f"No last update time for {data_type}, updating")
+                return True
+                
+            interval = self.update_intervals[data_type]
+            time_since_update = (datetime.now() - last_update).total_seconds()
             
-        last_update = self.last_updates.get(data_type)
-        if last_update is None:
-            return True
+            should_update = time_since_update >= interval
+            if should_update:
+                _LOGGER.debug(f"Should update {data_type}: {time_since_update:.1f}s >= {interval}s")
+            else:
+                _LOGGER.debug(f"Skipping {data_type}: {time_since_update:.1f}s < {interval}s (next in {interval - time_since_update:.1f}s)")
             
-        interval = self.update_intervals[data_type]
-        time_since_update = (datetime.now() - last_update).total_seconds()
-        
-        should_update = time_since_update >= interval
-        if should_update:
-            _LOGGER.debug(f"Should update {data_type}: {time_since_update}s >= {interval}s")
-        
-        return should_update
+            return should_update
+        except Exception as err:
+            _LOGGER.error(f"Error checking if {data_type} should update: {err}", exc_info=True)
+            # Return True on error to ensure updates continue
+            return True
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Update data via library with selective updates based on intervals."""
-        from datetime import datetime
-        
         try:
             # Determine which data types need updating
             update_weekplan = self._should_update_data_type("weekplan")
@@ -147,8 +158,8 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
             update_presence = self._should_update_data_type("presence")
             update_messages = self._should_update_data_type("messages")
             
-            _LOGGER.debug(f"Update flags - weekplan: {update_weekplan}, homework: {update_homework}, "
-                         f"presence: {update_presence}, messages: {update_messages}")
+            _LOGGER.info(f"Coordinator update cycle - weekplan: {update_weekplan}, homework: {update_homework}, "
+                        f"presence: {update_presence}, messages: {update_messages}")
             
             # Update only the data types that need updating
             await self.client.update_data_selective(
@@ -164,12 +175,16 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
             current_time = datetime.now()
             if update_weekplan:
                 self.last_updates["weekplan"] = current_time
+                _LOGGER.debug(f"Updated weekplan timestamp to {current_time}")
             if update_homework:
                 self.last_updates["homework"] = current_time
+                _LOGGER.debug(f"Updated homework timestamp to {current_time}")
             if update_presence:
                 self.last_updates["presence"] = current_time
+                _LOGGER.debug(f"Updated presence timestamp to {current_time}")
             if update_messages:
                 self.last_updates["messages"] = current_time
+                _LOGGER.debug(f"Updated messages timestamp to {current_time}")
             
             data = {
                 "children": self.client.children,
