@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-05-02
+
+### Added
+- **MitID authentication**: Replaces the deprecated Unilogin password flow with the same
+  MitID OAuth 2.0 + SAML flow used by the upstream `scaarup/aula` integration.
+  - Supports both **MitID app** (QR code scan) and **MitID code reader** (token) methods
+  - Multi-step config flow with a dedicated web view at
+    `/api/aula_easyiq/auth/<flow_id>` for displaying QR codes and identity selection
+  - Refresh-token-based renewal of access tokens, persisted in the config entry
+  - Reauth flow triggered automatically when refresh fails (`ConfigEntryAuthFailed`)
+- **Vendored `aula_login_client` package** (incl. `mitid_browserclient`) for the MitID
+  flow, sourced from `scaarup/aula` (MIT). Credit retained.
+
+### Changed
+- **`manifest.json` requirements** now include `pycryptodome`, `qrcode`, `requests`,
+  `beautifulsoup4`, and `lxml` for the MitID flow.
+- **Config entry schema (VERSION = 2)** now stores `mitid_username`, `auth_method`,
+  `access_token`, `refresh_token`, `token_expires_at` instead of `username` / `password`.
+- **Aula API calls** now pass `access_token` as a query parameter (the MitID OAuth
+  flow's tokens replace cookie-based session auth).
+
+### Removed
+- The Unilogin username/password login flow in `client.py`. Aula has deprecated this
+  authentication method, so it no longer works in practice.
+
+### Migration
+- Existing 0.4.x users will receive a reauth prompt on the next restart and need
+  to re-authenticate with MitID once.
+
 ## [0.4.0] - 2025-09-28
 
 ### Added

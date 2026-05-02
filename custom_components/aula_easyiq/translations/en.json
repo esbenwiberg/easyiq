@@ -27,22 +27,49 @@
   },
   "config": {
     "error": {
-      "cannot_connect": "Failed to connect to EasyIQ",
-      "invalid_auth": "Invalid authentication credentials",
+      "cannot_connect": "Failed to connect to Aula/EasyIQ",
+      "invalid_auth": "MitID authentication failed",
+      "auth_failed": "MitID authentication failed. Please try again.",
       "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This MitID account is already configured",
+      "reauth_successful": "Re-authentication was successful",
+      "auth_failed": "Authentication did not return tokens"
     },
     "step": {
       "user": {
         "data": {
-          "username": "Unilogin username",
-          "password": "Unilogin password",
+          "mitid_username": "MitID username",
+          "mitid_use_token": "Use MitID code reader (token) instead of MitID app",
+          "mitid_identity": "Identity number to use (1-based, when several identities exist)",
           "schoolschedule": "School schedules as calendar entities",
           "weekplan": "Weekplans as sensor attributes",
           "homework": "Homework as sensor attributes",
           "presence": "Presence/attendance as sensor attributes"
         },
-        "description": "Enter your Unilogin credentials to connect to EasyIQ",
-        "title": "Authentication"
+        "description": "Aula now requires MitID authentication. Enter your MitID username; you'll authorize the login from your MitID app on the next page (or with a code reader if you enabled the option).",
+        "title": "MitID Authentication"
+      },
+      "token_credentials": {
+        "data": {
+          "mitid_password": "MitID password",
+          "mitid_token": "6-digit code from your code reader"
+        },
+        "description": "Enter your MitID password and the 6-digit code displayed on your MitID code reader device.",
+        "title": "MitID code reader"
+      },
+      "authenticate": {
+        "title": "Authenticating with MitID",
+        "description": "Open the link to scan the MitID QR code with your MitID app, or wait while the code-reader login completes."
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with MitID",
+        "description": "Your Aula tokens for {username} have expired. Click submit to start a new MitID login."
+      },
+      "reauth_error": {
+        "title": "MitID authentication failed",
+        "description": "The MitID login did not complete. Click submit to try again."
       }
     }
   },

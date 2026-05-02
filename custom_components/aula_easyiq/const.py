@@ -39,8 +39,24 @@ CONF_SCHOOLSCHEDULE = "schoolschedule"
 CONF_WEEKPLAN = "weekplan"
 CONF_HOMEWORK = "homework"
 CONF_PRESENCE = "presence"
+# Legacy unilogin keys, kept only for migrating old config entries.
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
+
+# MitID authentication keys
+CONF_MITID_USERNAME = "mitid_username"
+CONF_MITID_PASSWORD = "mitid_password"  # Optional, for TOKEN method
+CONF_MITID_TOKEN = "mitid_token"  # Optional, for TOKEN method (code reader device)
+CONF_AUTH_METHOD = "auth_method"
+CONF_MITID_USE_TOKEN = "mitid_use_token"
+CONF_MITID_IDENTITY = "mitid_identity"  # 1-based index when several identities exist
+AUTH_METHOD_APP = "APP"
+AUTH_METHOD_TOKEN = "TOKEN"
+
+# Token storage keys (persisted in config entry data)
+CONF_ACCESS_TOKEN = "access_token"
+CONF_REFRESH_TOKEN = "refresh_token"
+CONF_TOKEN_EXPIRES_AT = "token_expires_at"
 
 # Update interval configuration keys
 CONF_WEEKPLAN_INTERVAL = "weekplan_interval"

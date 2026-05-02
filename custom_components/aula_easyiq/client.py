@@ -1,9 +1,10 @@
-"""EasyIQ API client with working CalendarGetWeekplanEvents implementation."""
+"""EasyIQ API client with MitID authentication and CalendarGetWeekplanEvents implementation."""
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+import threading
+from typing import Any, Callable
 import datetime
 import json
 
@@ -56,6 +57,7 @@ try:
         EASYIQ_HOMEWORK_WIDGET_ID,
         EASYIQ_WIDGETS,
         PRESENCE_STATUS,
+        AUTH_METHOD_APP,
     )
 except ImportError:
     # For standalone testing
@@ -77,21 +79,73 @@ except ImportError:
         5: "SOVER",            # Sleeping
         8: "HENTET/GÅET",      # Picked up/Gone
     }
+    AUTH_METHOD_APP = "APP"
+
+try:
+    from .aula_login_client.client import AulaLoginClient
+    from .aula_login_client.exceptions import AulaAuthenticationError
+except ImportError:
+    AulaLoginClient = None  # type: ignore[assignment]
+    AulaAuthenticationError = Exception  # type: ignore[assignment,misc]
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class EasyIQClient:
-    """Client for communicating with EasyIQ API using the working CalendarGetWeekplanEvents approach."""
+    """Client for communicating with EasyIQ + Aula APIs using MitID authentication."""
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(
+        self,
+        mitid_username: str,
+        auth_method: str = AUTH_METHOD_APP,
+        mitid_password: str | None = None,
+        mitid_token: str | None = None,
+        mitid_identity: int = 1,
+        stored_tokens: dict | None = None,
+        identity_selector: Callable | None = None,
+        token_update_callback: Callable[[dict], None] | None = None,
+    ) -> None:
         """Initialize the client."""
-        self.username = username
-        self.password = password
+        self.mitid_username = mitid_username
+        self.auth_method = auth_method
+        self.mitid_password = mitid_password
+        self.mitid_token = mitid_token
+        self.mitid_identity = mitid_identity
+
+        # Backwards-compatibility shim: a few helpers still emit `x-login: <username>`
+        # against EasyIQ's widget endpoint. The MitID username is the right value.
+        self.username = mitid_username
+
         self.session: aiohttp.ClientSession | None = None
-        self._session: requests.Session | None = None  # Synchronous session for auth
+        self._session: requests.Session | None = None  # Synchronous HTTP session for API calls
         self._authenticated = False
-        
+
+        # OAuth tokens issued by AulaLoginClient (access_token, refresh_token, expires_at, ...)
+        self._tokens: dict = dict(stored_tokens) if stored_tokens else {}
+        self._token_update_callback = token_update_callback
+        self._token_refresh_lock = threading.Lock()
+
+        # AulaLoginClient owns the MitID/OAuth flow and refresh logic.
+        self._aula_client = None
+        if AulaLoginClient is not None:
+            self._aula_client = AulaLoginClient(
+                mitid_username=mitid_username,
+                mitid_password=mitid_password,
+                mitid_token=mitid_token,
+                auth_method=auth_method,
+                verbose=False,
+                debug=False,
+            )
+            if identity_selector is None:
+                def _default_identity_selector(identity_names):
+                    if self.mitid_identity <= len(identity_names):
+                        return str(self.mitid_identity)
+                    return "1"
+                identity_selector = _default_identity_selector
+            self._aula_client.identity_selector = identity_selector
+            if self._tokens:
+                self._aula_client.tokens = self._tokens
+
         # Authentication data
         self._profiles = []
         self._profile_context = []
@@ -101,7 +155,7 @@ class EasyIQClient:
         self.apiurl = ""  # For compatibility with Aula client
         self.widgets = {}
         self.tokens = {}
-        
+
         # Data storage
         self.children = []
         self._childuserids = []
@@ -113,6 +167,50 @@ class EasyIQClient:
         self.homework_data = {}
         self.presence_status = {}  # Stores presence status codes (0-8)
         self.presence_data = {}    # Stores detailed presence information
+
+    def _get_access_token_param(self) -> str:
+        """Return the access_token query string fragment, or empty string."""
+        if self._tokens and self._tokens.get("access_token"):
+            return "&access_token=" + self._tokens["access_token"]
+        return ""
+
+    def _persist_tokens(self) -> None:
+        """Notify the integration that tokens were refreshed so they can be saved."""
+        if self._token_update_callback and self._tokens:
+            try:
+                self._token_update_callback(dict(self._tokens))
+            except Exception as err:  # pragma: no cover - persistence is best-effort
+                _LOGGER.warning("Token persistence callback failed: %s", err)
+
+    def _ensure_valid_token(self) -> bool:
+        """Refresh the access token if it is expired. Returns True if usable."""
+        if not self._aula_client or not self._tokens:
+            return bool(self._tokens.get("access_token"))
+
+        try:
+            self._aula_client.tokens = self._tokens
+            check = self._aula_client.check_token_expiration()
+        except Exception as err:
+            _LOGGER.debug("Token expiration check failed: %s - assuming valid", err)
+            return True
+
+        if check.get("valid"):
+            return True
+
+        # Need a refresh - serialize concurrent attempts.
+        if not self._token_refresh_lock.acquire(blocking=False):
+            _LOGGER.debug("Token refresh already in progress, continuing")
+            return True
+        try:
+            if self._aula_client.renew_access_token():
+                self._tokens = self._aula_client.tokens
+                self._persist_tokens()
+                _LOGGER.info("Aula access token refreshed via refresh_token")
+                return True
+            _LOGGER.warning("Refresh token rejected; re-authentication required")
+            return False
+        finally:
+            self._token_refresh_lock.release()
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         """Ensure we have an active aiohttp session."""
@@ -133,115 +231,106 @@ class EasyIQClient:
             await self.session.close()
 
     def login(self) -> bool:
-        """Login using the proven working Aula authentication approach."""
-        if requests is None or BS4 is None:
-            _LOGGER.error("requests or BeautifulSoup not available - cannot authenticate")
+        """Authenticate with Aula via MitID OAuth and verify API access."""
+        if requests is None:
+            _LOGGER.error("requests not available - cannot authenticate")
             return False
-        
+        if self._aula_client is None:
+            _LOGGER.error(
+                "aula_login_client package not available - cannot authenticate. "
+                "Make sure pycryptodome and qrcode are installed."
+            )
+            return False
+
         try:
-            _LOGGER.debug("Logging in")
+            # Reuse stored tokens if possible - falls back to refresh, then full MitID flow.
+            need_fresh_auth = True
+            if self._tokens.get("access_token"):
+                self._aula_client.tokens = self._tokens
+                check = self._aula_client.check_token_expiration()
+                if check.get("valid"):
+                    _LOGGER.info("Using stored Aula access token")
+                    need_fresh_auth = False
+                else:
+                    _LOGGER.info(
+                        "Stored token not valid (%s); attempting refresh",
+                        check.get("reason", "expired"),
+                    )
+                    if self._aula_client.renew_access_token():
+                        self._tokens = self._aula_client.tokens
+                        self._persist_tokens()
+                        need_fresh_auth = False
+
+            if need_fresh_auth:
+                _LOGGER.info("Performing fresh MitID authentication for %s", self.mitid_username)
+                auth_result = self._aula_client.authenticate()
+                if not auth_result.get("success"):
+                    err = auth_result.get("error", "unknown error")
+                    _LOGGER.error("MitID authentication failed: %s", err)
+                    return False
+                self._tokens = auth_result["tokens"]
+                self._persist_tokens()
+
+            # Initialize the HTTP session used for all subsequent API calls.
             self._session = requests.Session()
-            
-            # Step 1: Get initial login page (simplified approach from working Aula client)
-            headers = {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
-                "DNT": "1",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-            }
-            params = {"type": "unilogin"}
-            response = self._session.get(
-                "https://login.aula.dk/auth/login.php",
-                params=params,
-                headers=headers,
-                verify=True,
+            self._session.headers.update(
+                {
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) "
+                        "Gecko/20100101 Firefox/115.0"
+                    ),
+                }
             )
 
-            _html = BS4(response.text, "lxml")
-            _url = _html.form["action"]
-            
-            # Step 2: Submit IdP selection (simplified)
-            headers = {
-                "Host": "broker.unilogin.dk",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": "null",
-                "DNT": "1",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "same-origin",
-                "Sec-Fetch-User": "?1",
-            }
-            data = {"selectedIdp": "uni_idp"}
-            response = self._session.post(_url, headers=headers, data=data, verify=True)
-
-            # Step 3: Complete authentication flow (simplified from working Aula client)
-            user_data = {
-                "username": self.username,
-                "password": self.password,
-                "selected-aktoer": "KONTAKT",
-            }
-            redirects = 0
-            success = False
-            url = ""
-            while success == False and redirects < 10:
-                html = BS4(response.text, "lxml")
-                url = html.form["action"]
-
-                post_data = {}
-                for input_elem in html.find_all("input"):
-                    if input_elem.has_attr("name") and input_elem.has_attr("value"):
-                        post_data[input_elem["name"]] = input_elem["value"]
-                        for key in user_data:
-                            if input_elem.has_attr("name") and input_elem["name"] == key:
-                                post_data[key] = user_data[key]
-
-                response = self._session.post(url, data=post_data, verify=True)
-                if response.url == "https://www.aula.dk:443/portal/":
-                    success = True
-                redirects += 1
-
-            if not success:
-                _LOGGER.error(f"Authentication failed after {redirects} redirects")
-                return False
-
-            # Step 4: Find and validate API version
+            # Find and validate API version. Aula expects access_token as a query param,
+            # not a Bearer header (the Bearer header is only for EasyIQ widget calls).
             self.apiurl = API + API_VERSION
             self.api_url = self.apiurl
             apiver = int(API_VERSION)
             api_success = False
-            while api_success == False:
+            max_attempts = 20
+            attempt = 0
+            while not api_success and attempt < max_attempts:
+                attempt += 1
                 _LOGGER.debug("Trying API at " + self.apiurl)
                 ver = self._session.get(
-                    self.apiurl + "?method=profiles.getProfilesByLogin", verify=True
+                    self.apiurl
+                    + "?method=profiles.getProfilesByLogin"
+                    + self._get_access_token_param(),
+                    verify=True,
                 )
                 if ver.status_code == 410:
                     _LOGGER.debug(
-                        "API was expected at "
-                        + self.apiurl
-                        + " but responded with HTTP 410. The integration will automatically try a newer version and everything may work fine."
+                        "API was expected at %s but responded with HTTP 410. "
+                        "Trying a newer version.",
+                        self.apiurl,
                     )
                     apiver += 1
+                    self.apiurl = API + str(apiver)
+                    self.api_url = self.apiurl
                 elif ver.status_code == 403:
-                    _LOGGER.error("Access denied - check credentials")
+                    _LOGGER.error("Access denied - token may be invalid")
                     return False
                 elif ver.status_code == 200:
                     ver_json = ver.json()
+                    if not ver_json.get("data") or "profiles" not in ver_json["data"]:
+                        _LOGGER.error("API returned 200 but no profile data")
+                        return False
                     self._profiles = ver_json["data"]["profiles"]
                     api_success = True
-                self.apiurl = API + str(apiver)
-                self.api_url = self.apiurl
+                else:
+                    _LOGGER.error("Unexpected API response: %s", ver.status_code)
+                    return False
+            if not api_success:
+                _LOGGER.error("Could not find a working Aula API version")
+                return False
             _LOGGER.debug("Found API on " + self.apiurl)
 
-            # Step 5: Get profile context and children
+            # Get profile context and children
             profile_response = self._session.get(
-                self.apiurl + "?method=profiles.getProfileContext&portalrole=guardian",
+                self.apiurl
+                + "?method=profiles.getProfileContext&portalrole=guardian"
+                + self._get_access_token_param(),
                 verify=True,
             )
             profile_json = profile_response.json()
@@ -304,8 +393,12 @@ class EasyIQClient:
             return {}
         
         try:
+            self._ensure_valid_token()
             response = self._session.get(
-                self.apiurl + "?method=aulaToken.getWidgets", verify=True
+                self.apiurl
+                + "?method=aulaToken.getWidgets"
+                + self._get_access_token_param(),
+                verify=True,
             )
             if response.status_code == 200:
                 widgets_json = response.json()
@@ -345,8 +438,11 @@ class EasyIQClient:
         
         _LOGGER.debug(f"Requesting new token for widget {widget_id}")
         try:
+            self._ensure_valid_token()
             response = self._session.get(
-                self.apiurl + f"?method=aulaToken.getAulaToken&widgetId={widget_id}",
+                self.apiurl
+                + f"?method=aulaToken.getAulaToken&widgetId={widget_id}"
+                + self._get_access_token_param(),
                 verify=True,
             )
             if response.status_code == 200:
@@ -709,8 +805,11 @@ class EasyIQClient:
         try:
             # Get message threads from Aula API
             _LOGGER.debug("Fetching message threads...")
+            self._ensure_valid_token()
             mesres = self._session.get(
-                self.apiurl + "?method=messaging.getThreads&sortOn=date&orderDirection=desc&page=0",
+                self.apiurl
+                + "?method=messaging.getThreads&sortOn=date&orderDirection=desc&page=0"
+                + self._get_access_token_param(),
                 verify=True,
             )
             
@@ -742,7 +841,9 @@ class EasyIQClient:
             if unread == 1 and threadid:
                 _LOGGER.debug(f"Fetching message content for thread: {threadid}")
                 threadres = self._session.get(
-                    self.apiurl + f"?method=messaging.getMessagesForThread&threadId={threadid}&page=0",
+                    self.apiurl
+                    + f"?method=messaging.getMessagesForThread&threadId={threadid}&page=0"
+                    + self._get_access_token_param(),
                     verify=True,
                 )
                 
@@ -819,16 +920,20 @@ class EasyIQClient:
             actual_child_id = child_data.get("id", child_id)
             _LOGGER.debug(f"Child {child_id} -> using actual_child_id: {actual_child_id} for presence API call")
             
-            # Use the proper presence API endpoint
-            url = f"{API}{API_VERSION}/"
+            # Use the proper presence API endpoint. Aula expects the access_token
+            # as a query parameter; we live on whichever apiurl version login() found.
+            url = self.apiurl if self.apiurl else f"{API}{API_VERSION}"
             params = {
                 "method": "presence.getDailyOverview",
-                f"childIds[]": actual_child_id
+                f"childIds[]": actual_child_id,
             }
-            
+            self._ensure_valid_token()
+            if self._tokens.get("access_token"):
+                params["access_token"] = self._tokens["access_token"]
+
             _LOGGER.debug("Fetching presence data for child %s (actual ID: %s)", child_id, actual_child_id)
-            
-            # Use synchronous session in thread pool to maintain authentication cookies
+
+            # Use synchronous session in thread pool to keep coordinator non-blocking.
             import asyncio
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
