@@ -129,17 +129,24 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="token_credentials", data_schema=TOKEN_CREDENTIALS_SCHEMA
         )
 
+    def _get_auth_session(self) -> dict | None:
+        """Return the in-progress auth session for this flow_id, if any."""
+        return (
+            self.hass.data.get(DOMAIN, {})
+            .get("auth_sessions", {})
+            .get(self.flow_id)
+        )
+
+    def _drop_auth_session(self) -> None:
+        """Discard the auth session for this flow_id."""
+        sessions = self.hass.data.get(DOMAIN, {}).get("auth_sessions", {})
+        sessions.pop(self.flow_id, None)
+
     async def async_step_authenticate(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Run the actual MitID OAuth flow, surfacing QR codes via a web view."""
-        session_data = None
-        if (
-            DOMAIN in self.hass.data
-            and "auth_sessions" in self.hass.data[DOMAIN]
-            and self.flow_id in self.hass.data[DOMAIN]["auth_sessions"]
-        ):
-            session_data = self.hass.data[DOMAIN]["auth_sessions"][self.flow_id]
+        session_data = self._get_auth_session()
 
         # Start (or restart on retry) when we have no session yet, or the previous
         # attempt errored and the user clicked submit on the error step.
@@ -212,11 +219,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._tokens = session_data.get("tokens")
             if not self._tokens:
                 _LOGGER.error("Authentication completed without tokens")
+                self._drop_auth_session()
                 return self.async_external_step_done(next_step_id="reauth_error")
             self.hass.async_create_task(self._delayed_cleanup(self.flow_id))
             return self.async_external_step_done(next_step_id="complete")
 
         if session_data.get("error"):
+            self._drop_auth_session()
             return self.async_external_step_done(next_step_id="reauth_error")
 
         return self.async_external_step(
@@ -280,12 +289,19 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def _monitor_client_status(self, session_data: dict) -> None:
         """Mirror AulaLoginClient.status_message into the session for the web view."""
         client = session_data["client"]
+        last_message = session_data.get("status_message")
         while True:
             try:
                 mitid_client = client.get_mitid_client()
-                if mitid_client and hasattr(mitid_client, "status_message"):
-                    if not session_data.get("available_identities"):
-                        session_data["status_message"] = mitid_client.status_message
+                if (
+                    mitid_client
+                    and hasattr(mitid_client, "status_message")
+                    and not session_data.get("available_identities")
+                ):
+                    message = mitid_client.status_message
+                    if message and message != last_message:
+                        session_data["status_message"] = message
+                        last_message = message
             except Exception:
                 pass
             await asyncio.sleep(1)
@@ -335,8 +351,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(self, user_input=None) -> FlowResult:
         """Confirm reauth and start authentication."""
         if user_input is not None:
-            sessions = self.hass.data.get(DOMAIN, {}).get("auth_sessions", {})
-            sessions.pop(self.flow_id, None)
+            self._drop_auth_session()
             if self._auth_method == AUTH_METHOD_TOKEN:
                 return await self.async_step_token_credentials()
             return await self.async_step_authenticate()

@@ -174,6 +174,14 @@ class EasyIQClient:
             return "&access_token=" + self._tokens["access_token"]
         return ""
 
+    def _aula_get(self, method: str, **extra_params: str) -> "requests.Response":
+        """GET https://www.aula.dk/api/v<n>/?method=...&access_token=...&extras."""
+        self._ensure_valid_token()
+        url = f"{self.apiurl}?method={method}{self._get_access_token_param()}"
+        for key, value in extra_params.items():
+            url += f"&{key}={value}"
+        return self._session.get(url, verify=True)
+
     def _persist_tokens(self) -> None:
         """Notify the integration that tokens were refreshed so they can be saved."""
         if self._token_update_callback and self._tokens:
@@ -187,6 +195,14 @@ class EasyIQClient:
         if not self._aula_client or not self._tokens:
             return bool(self._tokens.get("access_token"))
 
+        # Fast path: skip the JWT decode if we already know expires_at and have
+        # > 5 minutes left. check_token_expiration() is hit thousands of times
+        # per day across all the API calls, so the early-out matters.
+        import time
+        expires_at = self._tokens.get("expires_at")
+        if isinstance(expires_at, (int, float)) and expires_at - time.time() > 300:
+            return True
+
         try:
             self._aula_client.tokens = self._tokens
             check = self._aula_client.check_token_expiration()
@@ -197,7 +213,6 @@ class EasyIQClient:
         if check.get("valid"):
             return True
 
-        # Need a refresh - serialize concurrent attempts.
         if not self._token_refresh_lock.acquire(blocking=False):
             _LOGGER.debug("Token refresh already in progress, continuing")
             return True
@@ -243,7 +258,6 @@ class EasyIQClient:
             return False
 
         try:
-            # Reuse stored tokens if possible - falls back to refresh, then full MitID flow.
             need_fresh_auth = True
             if self._tokens.get("access_token"):
                 self._aula_client.tokens = self._tokens
@@ -271,7 +285,6 @@ class EasyIQClient:
                 self._tokens = auth_result["tokens"]
                 self._persist_tokens()
 
-            # Initialize the HTTP session used for all subsequent API calls.
             self._session = requests.Session()
             self._session.headers.update(
                 {
@@ -282,56 +295,40 @@ class EasyIQClient:
                 }
             )
 
-            # Find and validate API version. Aula expects access_token as a query param,
-            # not a Bearer header (the Bearer header is only for EasyIQ widget calls).
+            # Aula expects access_token as a query param, not a Bearer header
+            # (Bearer is reserved for EasyIQ widget calls).
             self.apiurl = API + API_VERSION
             self.api_url = self.apiurl
             apiver = int(API_VERSION)
             api_success = False
-            max_attempts = 20
-            attempt = 0
-            while not api_success and attempt < max_attempts:
-                attempt += 1
+            for _ in range(20):
                 _LOGGER.debug("Trying API at " + self.apiurl)
-                ver = self._session.get(
-                    self.apiurl
-                    + "?method=profiles.getProfilesByLogin"
-                    + self._get_access_token_param(),
-                    verify=True,
-                )
+                ver = self._aula_get("profiles.getProfilesByLogin")
                 if ver.status_code == 410:
-                    _LOGGER.debug(
-                        "API was expected at %s but responded with HTTP 410. "
-                        "Trying a newer version.",
-                        self.apiurl,
-                    )
                     apiver += 1
                     self.apiurl = API + str(apiver)
                     self.api_url = self.apiurl
-                elif ver.status_code == 403:
+                    continue
+                if ver.status_code == 403:
                     _LOGGER.error("Access denied - token may be invalid")
                     return False
-                elif ver.status_code == 200:
+                if ver.status_code == 200:
                     ver_json = ver.json()
                     if not ver_json.get("data") or "profiles" not in ver_json["data"]:
                         _LOGGER.error("API returned 200 but no profile data")
                         return False
                     self._profiles = ver_json["data"]["profiles"]
                     api_success = True
-                else:
-                    _LOGGER.error("Unexpected API response: %s", ver.status_code)
-                    return False
+                    break
+                _LOGGER.error("Unexpected API response: %s", ver.status_code)
+                return False
             if not api_success:
                 _LOGGER.error("Could not find a working Aula API version")
                 return False
             _LOGGER.debug("Found API on " + self.apiurl)
 
-            # Get profile context and children
-            profile_response = self._session.get(
-                self.apiurl
-                + "?method=profiles.getProfileContext&portalrole=guardian"
-                + self._get_access_token_param(),
-                verify=True,
+            profile_response = self._aula_get(
+                "profiles.getProfileContext", portalrole="guardian"
             )
             profile_json = profile_response.json()
             self._profilecontext = profile_json["data"]["institutionProfile"]["relations"]
@@ -393,13 +390,7 @@ class EasyIQClient:
             return {}
         
         try:
-            self._ensure_valid_token()
-            response = self._session.get(
-                self.apiurl
-                + "?method=aulaToken.getWidgets"
-                + self._get_access_token_param(),
-                verify=True,
-            )
+            response = self._aula_get("aulaToken.getWidgets")
             if response.status_code == 200:
                 widgets_json = response.json()
                 widgets_data = widgets_json.get("data", {})
@@ -438,13 +429,7 @@ class EasyIQClient:
         
         _LOGGER.debug(f"Requesting new token for widget {widget_id}")
         try:
-            self._ensure_valid_token()
-            response = self._session.get(
-                self.apiurl
-                + f"?method=aulaToken.getAulaToken&widgetId={widget_id}"
-                + self._get_access_token_param(),
-                verify=True,
-            )
+            response = self._aula_get("aulaToken.getAulaToken", widgetId=widget_id)
             if response.status_code == 200:
                 response_json = response.json()
                 bearer_token = response_json["data"]
@@ -803,14 +788,12 @@ class EasyIQClient:
     def _sync_get_messages(self) -> dict[str, Any]:
         """Synchronous version of messages retrieval."""
         try:
-            # Get message threads from Aula API
             _LOGGER.debug("Fetching message threads...")
-            self._ensure_valid_token()
-            mesres = self._session.get(
-                self.apiurl
-                + "?method=messaging.getThreads&sortOn=date&orderDirection=desc&page=0"
-                + self._get_access_token_param(),
-                verify=True,
+            mesres = self._aula_get(
+                "messaging.getThreads",
+                sortOn="date",
+                orderDirection="desc",
+                page="0",
             )
             
             if mesres.status_code != 200:
@@ -840,11 +823,10 @@ class EasyIQClient:
             # If we have an unread message, get its content
             if unread == 1 and threadid:
                 _LOGGER.debug(f"Fetching message content for thread: {threadid}")
-                threadres = self._session.get(
-                    self.apiurl
-                    + f"?method=messaging.getMessagesForThread&threadId={threadid}&page=0"
-                    + self._get_access_token_param(),
-                    verify=True,
+                threadres = self._aula_get(
+                    "messaging.getMessagesForThread",
+                    threadId=str(threadid),
+                    page="0",
                 )
                 
                 if threadres.status_code == 200:

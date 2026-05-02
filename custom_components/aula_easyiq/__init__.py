@@ -82,7 +82,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:  # pragma: no cover - best-effort persistence
             _LOGGER.warning("Failed to persist refreshed tokens: %s", err)
 
-    # Create the EasyIQ client
     client = EasyIQClient(
         mitid_username=mitid_username,
         auth_method=auth_method,
@@ -93,7 +92,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         token_update_callback=token_update_callback,
     )
 
-    # Validate / refresh tokens (or trigger reauth if not possible).
     try:
         login_ok = await hass.async_add_executor_job(client.login)
     except Exception as err:
@@ -106,10 +104,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             "MitID re-authentication required. Please reconfigure EasyIQ."
         )
 
-    # Create the data update coordinator
     coordinator = EasyIQDataUpdateCoordinator(hass, client, entry)
 
-    # Perform initial data fetch
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception as err:
