@@ -44,6 +44,7 @@ from .mitid_auth import (
     MitIDAuthSession,
     build_config_entry_data,
     get_auth_manager,
+    start_live_mitid_auth,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -155,6 +156,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if session.complete:
                 return await self._create_entry_from_session(session, info["title"])
 
+            start_live_mitid_auth(self.hass, session.flow_id)
             return self.async_external_step(
                 step_id="mitid",
                 url=session.external_url,

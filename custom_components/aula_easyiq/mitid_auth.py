@@ -1,6 +1,7 @@
 """Clean-room MitID/Aula token authentication boundary."""
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, replace
 import time
 from typing import Any, Callable, Protocol
@@ -59,6 +60,30 @@ class AulaTokenState:
     access_token: str
     refresh_token: str
     expires_at: float
+
+    @classmethod
+    def from_auth_tokens(cls, tokens: dict[str, Any]) -> "AulaTokenState":
+        """Create token state from an Aula authentication result."""
+        access_token = tokens.get(CONF_ACCESS_TOKEN) or tokens.get("accessToken")
+        refresh_token = tokens.get(CONF_REFRESH_TOKEN) or tokens.get("refreshToken")
+        expires_at = (
+            tokens.get(CONF_TOKEN_EXPIRES_AT)
+            or tokens.get("expires_at")
+            or tokens.get("expiresAt")
+        )
+
+        if expires_at is None:
+            expires_in = tokens.get("expires_in", tokens.get("expiresIn", 3600))
+            expires_at = time.time() + int(expires_in)
+
+        if not access_token or not refresh_token:
+            raise MitIDAuthRejected("Aula auth result did not include token state")
+
+        return cls(
+            access_token=str(access_token),
+            refresh_token=str(refresh_token),
+            expires_at=float(expires_at),
+        )
 
     @classmethod
     def from_entry_data(cls, data: dict[str, Any]) -> "AulaTokenState":
@@ -184,6 +209,7 @@ class MitIDAuthManager:
         """Initialize the session manager."""
         self.base_path = base_path.rstrip("/")
         self._sessions: dict[str, MitIDAuthSession] = {}
+        self._clients: dict[str, Any] = {}
 
     def start_session(
         self,
@@ -207,6 +233,61 @@ class MitIDAuthManager:
     def get_session(self, flow_id: str) -> MitIDAuthSession | None:
         """Return a tracked MitID auth session."""
         return self._sessions.get(flow_id)
+
+    def attach_client(self, flow_id: str, client: Any) -> None:
+        """Attach the live Aula/MitID client used by a session."""
+        self._clients[flow_id] = client
+
+    def update_session(
+        self,
+        flow_id: str,
+        *,
+        status: str | None = None,
+        message: str | None = None,
+    ) -> MitIDAuthSession:
+        """Update public session status fields."""
+        session = self._sessions.get(flow_id)
+        if session is None:
+            raise MitIDAuthRejected("Unknown MitID auth session")
+
+        updated = replace(
+            session,
+            status=status or session.status,
+            message=message if message is not None else session.message,
+        )
+        self._sessions[flow_id] = updated
+        return updated
+
+    def public_status(self, flow_id: str) -> dict[str, Any] | None:
+        """Return public status plus transient QR/status data for a session."""
+        session = self._sessions.get(flow_id)
+        if session is None:
+            return None
+
+        status = session.as_status()
+        if session.status in {"complete", "failed"}:
+            return status
+
+        client = self._clients.get(flow_id)
+        if client is None:
+            return status
+
+        mitid_client = None
+        if hasattr(client, "get_mitid_client"):
+            mitid_client = client.get_mitid_client()
+
+        live_message = getattr(mitid_client, "status_message", None) or getattr(
+            client, "status_message", None
+        )
+        if live_message:
+            status["message"] = str(live_message)
+
+        if hasattr(client, "get_qr_codes_svg"):
+            qr_svgs = client.get_qr_codes_svg()
+            if qr_svgs:
+                status["qr_svg"] = qr_svgs[int(time.time()) % len(qr_svgs)]
+
+        return status
 
     def complete_session(
         self,
@@ -239,6 +320,86 @@ class MitIDAuthManager:
         updated = replace(session, status="failed", message=message)
         self._sessions[flow_id] = updated
         return updated
+
+
+def _default_aula_login_client(*, mitid_username: str) -> Any:
+    """Build the live Aula login client lazily so unit tests can use fakes."""
+    try:
+        from .aula_login_client.client import AulaLoginClient
+    except ImportError:
+        from aula_login_client.client import AulaLoginClient  # type: ignore[no-redef]
+
+    return AulaLoginClient(
+        mitid_username=mitid_username,
+        auth_method="APP",
+        verbose=False,
+        debug=False,
+    )
+
+
+async def _maybe_await(value: Any) -> Any:
+    """Await value when it is awaitable; otherwise return it unchanged."""
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def run_live_mitid_auth(
+    hass: Any,
+    manager: MitIDAuthManager,
+    flow_id: str,
+    *,
+    client_factory: Callable[..., Any] | None = None,
+) -> None:
+    """Run the live Aula/MitID authentication flow for a pending session."""
+    session = manager.get_session(flow_id)
+    if session is None:
+        return
+
+    try:
+        factory = client_factory or _default_aula_login_client
+        client = factory(mitid_username=session.username)
+        manager.attach_client(flow_id, client)
+        manager.update_session(
+            flow_id,
+            status="running",
+            message="Starting Aula MitID authentication...",
+        )
+
+        auth_result = await _maybe_await(
+            hass.async_add_executor_job(client.authenticate)
+        )
+        if not auth_result.get("success"):
+            raise MitIDAuthRejected(auth_result.get("error", "MitID authentication failed"))
+
+        token_state = AulaTokenState.from_auth_tokens(auth_result.get("tokens", {}))
+        manager.complete_session(flow_id, token_state, username=session.username)
+    except Exception as err:  # pylint: disable=broad-except
+        manager.fail_session(flow_id, str(err))
+
+    latest = manager.get_session(flow_id)
+    if latest and latest.ha_flow_id:
+        flow_mgr = hass.config_entries.flow
+        if hasattr(flow_mgr, "async_configure"):
+            await _maybe_await(flow_mgr.async_configure(latest.ha_flow_id))
+
+
+def start_live_mitid_auth(
+    hass: Any,
+    flow_id: str,
+    *,
+    auth_manager: MitIDAuthManager | None = None,
+    client_factory: Callable[..., Any] | None = None,
+) -> Any:
+    """Start the live MitID auth task in Home Assistant's event loop."""
+    manager = auth_manager or get_auth_manager(hass)
+    coroutine = run_live_mitid_auth(
+        hass,
+        manager,
+        flow_id,
+        client_factory=client_factory,
+    )
+    return hass.async_create_task(coroutine)
 
 
 def get_auth_manager(hass: Any) -> MitIDAuthManager:

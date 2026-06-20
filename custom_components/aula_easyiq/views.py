@@ -42,6 +42,7 @@ class MitIDAuthStatusView(HomeAssistantView):
         """Return public auth status for the flow."""
         manager = get_auth_manager(request.app["hass"])
         session = manager.get_session(flow_id)
+        status = manager.public_status(flow_id)
         if session is None:
             if "text/html" in request.headers.get("Accept", ""):
                 return web.Response(
@@ -58,12 +59,14 @@ class MitIDAuthStatusView(HomeAssistantView):
             return web.Response(
                 text=_render_auth_page(
                     "EasyIQ MitID Authentication",
-                    session.message or "Complete guardian MitID authentication.",
+                    status.get("message")
+                    if status
+                    else "Complete guardian MitID authentication.",
                     status=session.status,
                 ),
                 content_type="text/html",
             )
-        return web.json_response(session.as_status())
+        return web.json_response(status or session.as_status())
 
 
 class MitIDAuthCompleteView(HomeAssistantView):
@@ -138,14 +141,60 @@ def _render_auth_page(title: str, message: str, *, status: str = "pending") -> s
       font-size: 0.875rem;
       text-transform: uppercase;
     }}
+    #qr {{
+      display: grid;
+      min-height: 12rem;
+      margin-top: 1.5rem;
+      place-items: center;
+    }}
+    #qr svg {{
+      background: #fff;
+      border-radius: 0.5rem;
+      max-width: min(18rem, 80vw);
+      padding: 0.75rem;
+    }}
   </style>
 </head>
 <body>
   <main>
     <h1>{safe_title}</h1>
-    <p>{safe_message}</p>
-    <p>Return to Home Assistant after the authorization step completes.</p>
-    <span class="status">{safe_status}</span>
+    <p id="message">{safe_message}</p>
+    <p id="instruction">Open MitID on your phone and approve the Aula login when prompted.</p>
+    <div id="qr"></div>
+    <span id="status" class="status">{safe_status}</span>
   </main>
+  <script>
+    async function refreshStatus() {{
+      try {{
+        const response = await fetch(window.location.href, {{
+          headers: {{ "Accept": "application/json" }},
+          cache: "no-store",
+        }});
+        const data = await response.json();
+        if (data.message) {{
+          document.getElementById("message").textContent = data.message;
+        }}
+        if (data.status) {{
+          document.getElementById("status").textContent = data.status;
+        }}
+        document.getElementById("qr").innerHTML = data.qr_svg || "";
+        if (data.status === "complete") {{
+          document.getElementById("instruction").textContent =
+            "Authentication completed. Return to Home Assistant.";
+          return;
+        }}
+        if (data.status === "failed") {{
+          document.getElementById("instruction").textContent =
+            "Authentication failed. Return to Home Assistant and try again.";
+          return;
+        }}
+      }} catch (err) {{
+        document.getElementById("message").textContent =
+          "Could not refresh MitID authentication status.";
+      }}
+      window.setTimeout(refreshStatus, 1000);
+    }}
+    refreshStatus();
+  </script>
 </body>
 </html>"""

@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2026-06-20
+
+### Fixed
+- Start a real background Aula/MitID authentication task after username submission instead of leaving the external auth page stuck at `PENDING`
+- Show live MitID status and QR updates on the external auth page while the auth task runs
+- Add the runtime dependencies needed by the MitID app QR/auth flow
+
 ## [0.5.2] - 2026-06-20
 
 ### Fixed

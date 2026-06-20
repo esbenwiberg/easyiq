@@ -20,7 +20,15 @@ class ManifestContractTests(unittest.TestCase):
         manifest = json.loads((INTEGRATION_DIR / "manifest.json").read_text())
         requirements = " ".join(manifest.get("requirements", []))
 
-        for package_name in ("aiohttp", "beautifulsoup4", "lxml", "pytz", "requests"):
+        for package_name in (
+            "aiohttp",
+            "beautifulsoup4",
+            "lxml",
+            "pycryptodome",
+            "pytz",
+            "qrcode",
+            "requests",
+        ):
             with self.subTest(package_name=package_name):
                 self.assertIn(package_name, requirements)
 
