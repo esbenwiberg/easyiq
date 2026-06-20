@@ -127,11 +127,14 @@ class EasyIQClient:
         self._profile_context = []
         self._institution_profiles = []
         self._children_data = {}
+        self._guardian_user_id = ""
+        self._guardian_profile_id = ""
         self.api_url = ""
         self.apiurl = ""  # For compatibility with Aula client
         self.widgets = {}
         self.tokens = {}
         self._calendar_login_id_cache = {}
+        self._calendar_request_variant_cache = {}
         
         # Data storage
         self.children = []
@@ -258,9 +261,11 @@ class EasyIQClient:
                 )
 
             profile_json = profile_response.json()
-            self._profile_context = profile_json["data"]["institutionProfile"][
-                "relations"
-            ]
+            profile_data = profile_json["data"]
+            institution_profile = profile_data.get("institutionProfile", {})
+            self._guardian_user_id = str(profile_data.get("userId", "") or "")
+            self._guardian_profile_id = str(institution_profile.get("id", "") or "")
+            self._profile_context = institution_profile["relations"]
             self._profilecontext = self._profile_context
 
             self._children_data = {}
@@ -489,22 +494,103 @@ class EasyIQClient:
                 _LOGGER.debug(f"Children data: {self._children_data}")
                 return []
             
-            # EasyIQ has historically accepted different Aula child identifiers
-            # depending on institution/widget context. Try the known working
-            # institution-profile id first, then fall back to the user/login id.
+            # EasyIQ has historically accepted different Aula identifiers in
+            # the widget request depending on institution/widget context.
             actual_child_id = str(child_data.get("id", child_id))
             user_child_id = str(child_data.get("userId", child_id))
             cached_login_id = self._calendar_login_id_cache.get(str(child_id))
-            candidate_login_ids = []
-            if cached_login_id:
-                candidate_login_ids.append(str(cached_login_id))
-            for candidate in (actual_child_id, user_child_id, str(child_id)):
-                if candidate and candidate not in candidate_login_ids:
-                    candidate_login_ids.append(candidate)
+            x_login_candidates = []
+            for candidate in (
+                self.username,
+                self._guardian_user_id,
+                self._guardian_profile_id,
+            ):
+                candidate = str(candidate or "").strip()
+                if candidate and candidate not in x_login_candidates:
+                    x_login_candidates.append(candidate)
+
+            request_variants: list[dict[str, str]] = []
+
+            def add_variant(
+                name: str,
+                *,
+                login_id: str,
+                x_child: str,
+                x_childfilter: str,
+                x_login: str,
+            ) -> None:
+                variant = {
+                    "name": name,
+                    "login_id": str(login_id),
+                    "x_child": str(x_child),
+                    "x_childfilter": str(x_childfilter),
+                    "x_login": str(x_login),
+                }
+                key = (
+                    variant["login_id"],
+                    variant["x_child"],
+                    variant["x_childfilter"],
+                    variant["x_login"],
+                )
+                if all(
+                    (
+                        existing["login_id"],
+                        existing["x_child"],
+                        existing["x_childfilter"],
+                        existing["x_login"],
+                    )
+                    != key
+                    for existing in request_variants
+                ):
+                    request_variants.append(variant)
+
+            cached_variant = self._calendar_request_variant_cache.get(str(child_id))
+            if cached_variant:
+                request_variants.append(cached_variant)
+
+            for x_login in x_login_candidates:
+                # Legacy Chrome DevTools shape: child profile id as loginId,
+                # child user id in the EasyIQ child headers.
+                add_variant(
+                    "profile-login/user-child",
+                    login_id=str(cached_login_id or actual_child_id),
+                    x_child=user_child_id,
+                    x_childfilter=user_child_id,
+                    x_login=x_login,
+                )
+                # Some MitID-backed accounts expose the child user id as the
+                # accepted loginId.
+                add_variant(
+                    "user-login/user-child",
+                    login_id=user_child_id,
+                    x_child=user_child_id,
+                    x_childfilter=user_child_id,
+                    x_login=x_login,
+                )
+                # Some EasyIQ widgets expect the profile id in both the query
+                # and child headers.
+                add_variant(
+                    "profile-login/profile-child",
+                    login_id=actual_child_id,
+                    x_child=actual_child_id,
+                    x_childfilter=actual_child_id,
+                    x_login=x_login,
+                )
+                # If EasyIQ treats loginId as the current guardian session,
+                # use the current x-login candidate as loginId and keep the
+                # child filter on the selected child.
+                add_variant(
+                    "guardian-login/user-child",
+                    login_id=x_login,
+                    x_child=user_child_id,
+                    x_childfilter=user_child_id,
+                    x_login=x_login,
+                )
+
             _LOGGER.debug(
-                "Child %s calendar loginId candidates: %s",
+                "Child %s calendar request variants: %s",
                 child_id,
-                candidate_login_ids,
+                [variant["name"] for variant in request_variants],
             )
             
             # Calculate the target date based on weeks_ahead
@@ -535,9 +621,10 @@ class EasyIQClient:
 
             last_response = None
             last_params = None
-            for login_id in candidate_login_ids:
+            failed_attempts = []
+            for variant in request_variants:
                 params = {
-                    "loginId": login_id,
+                    "loginId": variant["login_id"],
                     "date": target_date.isoformat() + "Z",  # Support different weeks
                     "activityFilter": "-1",  # Try with no filter first
                     "courseFilter": "-1",
@@ -547,12 +634,21 @@ class EasyIQClient:
                 headers = {
                     **base_headers,
                     # Custom headers from Chrome DevTools
-                    "x-child": str(child_id),
-                    "x-childfilter": str(child_id),
+                    "x-child": variant["x_child"],
+                    "x-childfilter": variant["x_childfilter"],
+                    "x-login": variant["x_login"],
                 }
 
                 _LOGGER.debug("Calendar events request - URL: %s", url)
                 _LOGGER.debug("Calendar events request - Params: %s", params)
+                _LOGGER.debug(
+                    "Calendar events request variant %s - x-child: %s, "
+                    "x-childfilter: %s, x-login: %s",
+                    variant["name"],
+                    variant["x_child"],
+                    variant["x_childfilter"],
+                    variant["x_login"],
+                )
 
                 # Make the request using the authenticated session
                 response = self._ensure_sync_session().get(
@@ -562,9 +658,12 @@ class EasyIQClient:
                 last_params = params
 
                 if response.status_code != 200:
+                    failed_attempts.append(
+                        f"{variant['name']}={response.status_code}"
+                    )
                     _LOGGER.debug(
-                        "Calendar events loginId %s returned status %s",
-                        login_id,
+                        "Calendar events variant %s returned status %s",
+                        variant["name"],
                         response.status_code,
                     )
                     continue
@@ -599,7 +698,8 @@ class EasyIQClient:
                         else:
                             events = []
 
-                    self._calendar_login_id_cache[str(child_id)] = login_id
+                    self._calendar_login_id_cache[str(child_id)] = variant["login_id"]
+                    self._calendar_request_variant_cache[str(child_id)] = variant
                     _LOGGER.info("🎉 Successfully retrieved %d calendar events!", len(events))
 
                     # Log some sample data for debugging
@@ -624,12 +724,13 @@ class EasyIQClient:
                     return []
 
             if last_response is not None:
-                response_preview = last_response.text[:200].replace("\n", " ")
+                response_preview = " ".join(last_response.text.split())[:500]
                 _LOGGER.error(
                     "Calendar events API returned status %s for week offset %s; "
-                    "response preview: %r",
+                    "attempts: %s; response preview: %r",
                     last_response.status_code,
                     weeks_ahead,
+                    ", ".join(failed_attempts),
                     response_preview,
                 )
                 _LOGGER.debug("Calendar events failed request params: %s", last_params)

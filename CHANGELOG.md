@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.7] - 2026-06-20
+
+### Fixed
+- Try the guardian Aula login context and alternate child header shapes when EasyIQ returns HTML 500 pages for calendar event requests
+- Log the attempted calendar request variants when EasyIQ still returns a non-200 response
+
 ## [0.5.6] - 2026-06-20
 
 ### Fixed

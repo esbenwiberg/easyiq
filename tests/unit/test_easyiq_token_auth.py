@@ -145,6 +145,47 @@ class CalendarFallbackSession(FakeSession):
         return super().get(url, **kwargs)
 
 
+class CalendarGuardianLoginSession(FakeSession):
+    def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        params = dict(kwargs.get("params") or {})
+        if params.get("method") == "profiles.getProfileContext":
+            return FakeResponse(
+                {
+                    "data": {
+                        "userId": "guardian-42",
+                        "institutionProfile": {
+                            "id": "guardian-profile-99",
+                            "relations": [{"id": 200}],
+                        },
+                    }
+                }
+            )
+
+        if "CalendarGetWeekplanEvents" in url:
+            headers = kwargs.get("headers") or {}
+            self.calls.append(
+                {
+                    "url": url,
+                    "params": params,
+                    "headers": headers,
+                }
+            )
+            if headers.get("x-login") == "guardian-42" and params.get("loginId") == "200":
+                return FakeResponse(
+                    [
+                        {
+                            "itemType": 9,
+                            "start": "2026/06/22 10:00",
+                            "end": "2026/06/22 11:00",
+                            "courses": "Danish",
+                        }
+                    ]
+                )
+            return FakeResponse({}, status_code=500, text="wrong login context")
+
+        return super().get(url, **kwargs)
+
+
 class RecordingRefresher:
     def __init__(self, token_state: Any | None = None, fail: Exception | None = None) -> None:
         self.token_state = token_state
@@ -260,6 +301,38 @@ class EasyIQTokenAuthTests(unittest.TestCase):
         self.assertEqual(["200", "100"], calendar_login_ids)
         self.assertEqual("Math", events[0]["courses"])
         self.assertEqual("100", client._calendar_login_id_cache["100"])
+
+    def test_calendar_events_fall_back_to_guardian_login_context(self) -> None:
+        fake_session = CalendarGuardianLoginSession()
+        token_state = mitid_auth.AulaTokenState(
+            access_token="access-123",
+            refresh_token="refresh-123",
+            expires_at=time.time() + 3600,
+        )
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            token_state,
+            session_factory=lambda: fake_session,
+        )
+
+        self.assertTrue(client.login())
+
+        events = client._sync_get_calendar_events("100")
+
+        calendar_calls = [
+            call
+            for call in fake_session.calls
+            if "CalendarGetWeekplanEvents" in call["url"]
+        ]
+        self.assertEqual("Danish", events[0]["courses"])
+        self.assertIn(
+            "guardian-42",
+            {call["headers"]["x-login"] for call in calendar_calls},
+        )
+        self.assertEqual(
+            "guardian-42",
+            client._calendar_request_variant_cache["100"]["x_login"],
+        )
 
 
 if __name__ == "__main__":
