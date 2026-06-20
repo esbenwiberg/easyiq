@@ -278,7 +278,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -349,7 +349,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def _get_option(self, key: str, default: Any) -> Any:
         """Get option value from config entry."""
-        return self.config_entry.options.get(key, self.config_entry.data.get(key, default))
+        return self._config_entry.options.get(
+            key, self._config_entry.data.get(key, default)
+        )
 
 
 class CannotConnect(HomeAssistantError):

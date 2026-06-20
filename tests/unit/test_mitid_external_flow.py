@@ -104,6 +104,10 @@ def install_dependency_stubs() -> None:
             }
 
     class OptionsFlow:
+        @property
+        def config_entry(self) -> Any:
+            raise ValueError("config_entry is not available during initialisation")
+
         def async_create_entry(self, *, title: str, data: dict[str, Any]) -> dict[str, Any]:
             return {"type": "create_entry", "title": title, "data": data}
 
@@ -161,7 +165,20 @@ class FakeHass:
         self.data = {"aula_easyiq": {"mitid_auth_manager": manager}}
 
 
+class FakeConfigEntry:
+    def __init__(self) -> None:
+        self.data = {"weekplan": False}
+        self.options = {"homework": False}
+
+
 class MitIDExternalFlowTests(unittest.TestCase):
+    def test_options_flow_keeps_constructor_config_entry_privately(self) -> None:
+        handler = config_flow.OptionsFlowHandler(FakeConfigEntry())
+
+        self.assertFalse(handler._get_option("weekplan", True))
+        self.assertFalse(handler._get_option("homework", True))
+        self.assertTrue(handler._get_option("presence", True))
+
     def test_completed_external_step_reports_done_before_creating_entry(self) -> None:
         manager = mitid_auth.MitIDAuthManager()
         session = manager.start_session(

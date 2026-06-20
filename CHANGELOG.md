@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2026-06-20
+
+### Fixed
+- Fix the options flow on Home Assistant 2026 by avoiding assignment to the read-only `config_entry` property
+
 ## [0.5.4] - 2026-06-20
 
 ### Fixed
