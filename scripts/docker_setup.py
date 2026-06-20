@@ -164,13 +164,13 @@ def start_home_assistant(config_dir):
     return True
 
 def check_credentials():
-    """Check if credentials are set up."""
+    """Check if optional live MitID token state is set up."""
     env_file = Path(".env")
     if not env_file.exists():
         print("⚠️  No .env file found")
-        print("📝 Please create .env file with your Aula credentials:")
+        print("📝 Optional live smoke tests can use Aula token state from MitID:")
         print("   cp .env.template .env")
-        print("   # Edit .env with your username and password")
+        print("   # Edit .env only when you have fresh token state from a MitID flow")
         return False
     
     print("✅ .env file found")
@@ -214,7 +214,7 @@ def main():
     print("3. Complete the initial setup wizard")
     print("4. Go to Settings → Devices & Services")
     print("5. Click 'Add Integration' and search for 'EasyIQ'")
-    print("6. Enter your Aula credentials")
+    print("6. Enter your guardian MitID username and complete the authorization step")
     print("\n🔧 Useful Commands:")
     print("   docker logs homeassistant     # View logs")
     print("   docker restart homeassistant  # Restart container")

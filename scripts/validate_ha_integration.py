@@ -232,6 +232,7 @@ def validate_mitid_auth_shape():
         "DEVELOPMENT_SETUP.md",
         ".env.template",
         "scripts/dev_setup.py",
+        "scripts/docker_setup.py",
         "scripts/test_client.py",
         "custom_components/aula_easyiq/strings.json",
         "custom_components/aula_easyiq/translations/en.json",
@@ -241,6 +242,8 @@ def validate_mitid_auth_shape():
         "username/password",
         "EASYIQ_PASSWORD",
         "your_aula_password",
+        "Aula credentials",
+        "username and password",
     ]
 
     violations = []

@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-06-20
+
+### Added
+- **Guardian MitID Authentication**: Added the MitID-backed Aula authentication flow for new setup and reauthentication
+- **Aula Token Storage**: Stores Aula access/refresh token state instead of the previous login credentials
+- **Token Refresh Lifecycle**: Refreshes Aula tokens during polling and raises reauthentication when tokens are rejected
+- **Legacy Entry Migration**: Migrates old config entries to a MitID reauthentication-required state without preserving passwords
+- **MitID Auth Views**: Added local Home Assistant HTTP views for the external MitID auth step
+- **Offline Test Coverage**: Added focused tests for MitID config flow, token-backed client calls, legacy migration, manifest requirements, and update policy
+
+### Changed
+- Replaced obsolete Aula/Unilogin form-login scraping with token-backed Aula API calls
+- Updated README, development setup, environment template, debug scripts, and validation docs for guardian MitID setup
+- Updated manifest requirements for the MitID/token auth implementation
+
+### Fixed
+- Removed remaining user-facing password setup instructions from the Docker development helper
+- Extended validation to catch stale password setup wording in Docker setup documentation
+
 ## [0.4.0] - 2025-09-28
 
 ### Added
@@ -76,7 +95,7 @@ All notable changes to this project will be documented in this file.
 
 ### Technical
 - Uses EasyIQ CalendarGetWeekplanEvents API endpoint
-- Authenticates via Aula credentials (Unilogin)
+- Originally authenticated through Aula's then-current credential flow
 - Supports both schedule events (itemType 9) and homework (itemType 4)
 - Implements proper Home Assistant integration patterns
 - Includes comprehensive error handling and logging
