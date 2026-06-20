@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-06-20
+
+### Fixed
+- Sorted `manifest.json` keys in Home Assistant's required order so Hassfest passes
+
 ## [0.5.0] - 2026-06-20
 
 ### Added

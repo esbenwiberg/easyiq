@@ -1,9 +1,9 @@
 {
   "domain": "aula_easyiq",
   "name": "Aula-EasyIQ",
+  "after_dependencies": ["http"],
   "codeowners": ["@esbenwiberg"],
   "config_flow": true,
-  "after_dependencies": ["http"],
   "dependencies": [],
   "dhcp": [],
   "documentation": "https://github.com/esbenwiberg/easyiq",
@@ -19,6 +19,6 @@
     "requests>=2.28.0"
   ],
   "ssdp": [],
-  "version": "0.5.0",
+  "version": "0.5.1",
   "zeroconf": []
 }
