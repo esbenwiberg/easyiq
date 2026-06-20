@@ -196,6 +196,32 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 url=session.external_url,
             )
 
+        return self.async_external_step_done(next_step_id="mitid_finish")
+
+    async def async_step_mitid_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Create the entry after Home Assistant marks the external step done."""
+        if not self._auth_session_id:
+            return self.async_abort(reason="missing_auth_session")
+
+        session = get_auth_manager(self.hass).get_session(self._auth_session_id)
+        if session is None:
+            return self.async_abort(reason="missing_auth_session")
+
+        if session.status == "failed":
+            return self.async_show_form(
+                step_id="user",
+                data_schema=STEP_USER_DATA_SCHEMA,
+                errors={"base": "invalid_auth"},
+            )
+
+        if not session.complete:
+            return self.async_external_step(
+                step_id="mitid",
+                url=session.external_url,
+            )
+
         return await self._create_entry_from_session(
             session, f"EasyIQ ({session.username})"
         )

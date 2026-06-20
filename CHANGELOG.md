@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2026-06-20
+
+### Fixed
+- Complete the Home Assistant external MitID config-flow step before creating the config entry, so the setup dialog advances after successful authentication
+
 ## [0.5.3] - 2026-06-20
 
 ### Fixed
