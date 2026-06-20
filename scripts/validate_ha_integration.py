@@ -175,6 +175,9 @@ def validate_file_structure():
         "custom_components/aula_easyiq/sensor.py",
         "custom_components/aula_easyiq/client.py",
         "custom_components/aula_easyiq/const.py",
+        "custom_components/aula_easyiq/migration.py",
+        "custom_components/aula_easyiq/mitid_auth.py",
+        "custom_components/aula_easyiq/views.py",
         "custom_components/aula_easyiq/strings.json",
         "custom_components/aula_easyiq/translations/en.json"
     ]
@@ -191,6 +194,69 @@ def validate_file_structure():
     print("✅ File structure is valid")
     return True
 
+def validate_mitid_auth_shape():
+    """Validate MitID/token auth replaced password setup."""
+    print("🔍 Validating MitID auth shape...")
+
+    manifest = json.loads(Path("custom_components/aula_easyiq/manifest.json").read_text())
+    requirements = " ".join(manifest.get("requirements", []))
+    after_dependencies = manifest.get("after_dependencies", [])
+
+    if "http" not in after_dependencies:
+        print("❌ manifest.json must load after the Home Assistant http integration")
+        return False
+
+    if "requests" not in requirements:
+        print("❌ manifest.json must declare requests for Aula token refresh")
+        return False
+
+    config_flow = Path("custom_components/aula_easyiq/config_flow.py").read_text()
+    client = Path("custom_components/aula_easyiq/client.py").read_text()
+
+    required_config_flow_terms = [
+        "CONF_MITID_USERNAME",
+        "async_external_step",
+        "build_config_entry_data",
+    ]
+    missing_terms = [term for term in required_config_flow_terms if term not in config_flow]
+    if missing_terms:
+        print(f"❌ Config flow missing MitID terms: {missing_terms}")
+        return False
+
+    if "login.aula.dk/auth/login.php" in client or "selectedIdp" in client:
+        print("❌ Client still contains old form-login scraping")
+        return False
+
+    user_facing_files = [
+        "README.md",
+        "DEVELOPMENT_SETUP.md",
+        ".env.template",
+        "scripts/dev_setup.py",
+        "scripts/test_client.py",
+        "custom_components/aula_easyiq/strings.json",
+        "custom_components/aula_easyiq/translations/en.json",
+    ]
+    forbidden_terms = [
+        "Unilogin password",
+        "username/password",
+        "EASYIQ_PASSWORD",
+        "your_aula_password",
+    ]
+
+    violations = []
+    for file_name in user_facing_files:
+        content = Path(file_name).read_text()
+        for term in forbidden_terms:
+            if term in content:
+                violations.append(f"{file_name}: {term}")
+
+    if violations:
+        print(f"❌ Old password setup text remains: {violations}")
+        return False
+
+    print("✅ MitID auth shape is valid")
+    return True
+
 def main():
     """Run all validation checks."""
     print("🏠 Home Assistant Integration Validation")
@@ -205,7 +271,8 @@ def main():
         validate_init_file,
         validate_config_flow,
         validate_sensor,
-        validate_translations
+        validate_translations,
+        validate_mitid_auth_shape,
     ]
     
     results = []

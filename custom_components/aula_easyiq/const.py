@@ -39,6 +39,18 @@ CONF_SCHOOLSCHEDULE = "schoolschedule"
 CONF_WEEKPLAN = "weekplan"
 CONF_HOMEWORK = "homework"
 CONF_PRESENCE = "presence"
+
+# MitID/Aula token authentication keys
+CONF_MITID_USERNAME = "mitid_username"
+CONF_AUTH_METHOD = "auth_method"
+CONF_ACCESS_TOKEN = "access_token"
+CONF_REFRESH_TOKEN = "refresh_token"
+CONF_TOKEN_EXPIRES_AT = "token_expires_at"
+CONF_REAUTH_REQUIRED = "reauth_required"
+CONF_AUTH_SESSION_ID = "auth_session_id"
+AUTH_METHOD_MITID = "mitid"
+
+# Legacy keys retained only to identify and migrate old entries.
 CONF_USERNAME = "username"
 CONF_PASSWORD = "password"
 

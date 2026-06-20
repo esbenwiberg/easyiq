@@ -1,0 +1,90 @@
+contract_version: 1
+title: "Add MitID authentication for EasyIQ"
+depends_on: []
+scenarios:
+  - id: mitid-config-entry
+    given:
+      - "a user adds the EasyIQ integration through the Home Assistant config flow"
+      - "the MitID auth boundary returns an Aula access token, refresh token, and expiry"
+    when:
+      - "the config flow completes successfully"
+    then:
+      - "the config entry stores MitID username and token fields"
+      - "the config entry does not store an Aula/Unilogin password"
+      - "feature toggles from setup are preserved"
+  - id: token-backed-aula-api
+    given:
+      - "an EasyIQClient initialized with valid Aula token state"
+      - "mocked Aula API responses for profiles, profile context, widget tokens, messages, and presence"
+    when:
+      - "the client authenticates and fetches child/profile, widget token, message, and presence data"
+    then:
+      - "each Aula API request includes the access token"
+      - "the client still populates children and EasyIQ widget bearer tokens for downstream schedule calls"
+  - id: token-refresh-and-reauth
+    given:
+      - "an EasyIQ config entry with expired or rejected Aula access token state"
+    when:
+      - "the integration validates tokens during setup or data refresh"
+    then:
+      - "a successful refresh updates runtime token state without reload loops"
+      - "a failed refresh raises or propagates Home Assistant reauth instead of silently returning stale empty data"
+  - id: old-entry-migration
+    given:
+      - "an existing version 1 EasyIQ config entry containing username and password"
+    when:
+      - "Home Assistant migrates or sets up the entry after the MitID auth change"
+    then:
+      - "the old password is not retained"
+      - "the entry requires MitID reauthentication rather than using password auth"
+  - id: static-auth-shape
+    given:
+      - "the integration files, manifest, translations, docs, and scripts after the auth migration"
+    when:
+      - "the Home Assistant validation script is run"
+    then:
+      - "validation checks for required MitID auth files and requirements"
+      - "validation rejects user-facing Unilogin password setup strings"
+required_facts:
+  - id: fact-mitid-config-entry
+    proves: [mitid-config-entry]
+    kind: unit-test
+    artifact:
+      path: tests/test_mitid_config_flow.py
+      change: create
+    command: python -m pytest tests/test_mitid_config_flow.py
+  - id: fact-token-backed-aula-api
+    proves: [token-backed-aula-api]
+    kind: unit-test
+    artifact:
+      path: tests/test_easyiq_token_auth.py
+      change: create
+    command: python -m pytest tests/test_easyiq_token_auth.py -k token_backed_aula_api
+  - id: fact-token-refresh-and-reauth
+    proves: [token-refresh-and-reauth]
+    kind: unit-test
+    artifact:
+      path: tests/test_easyiq_token_auth.py
+      change: update
+    command: python -m pytest tests/test_easyiq_token_auth.py -k token_refresh_and_reauth
+  - id: fact-old-entry-migration
+    proves: [old-entry-migration]
+    kind: unit-test
+    artifact:
+      path: tests/test_config_entry_migration.py
+      change: create
+    command: python -m pytest tests/test_config_entry_migration.py
+  - id: fact-static-auth-shape
+    proves: [static-auth-shape]
+    kind: custom-command
+    artifact:
+      path: scripts/validate_ha_integration.py
+      change: update
+    command: python scripts/validate_ha_integration.py
+human_review:
+  - id: review-live-guardian-mitid-smoke
+    covers:
+      - mitid-config-entry
+      - token-backed-aula-api
+    criterion: "A real guardian MitID account can complete the external auth flow, obtain Aula tokens, and fetch at least one child."
+    reason: "The live MitID/NemLog-in approval flow cannot be reliably exercised with mocked unit tests."

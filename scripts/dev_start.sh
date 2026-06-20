@@ -6,13 +6,6 @@ if [ -f .env ]; then
     export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Check if credentials are set
-if [ -z "$EASYIQ_USERNAME" ] || [ -z "$EASYIQ_PASSWORD" ]; then
-    echo "Error: EASYIQ_USERNAME and EASYIQ_PASSWORD must be set in .env file"
-    echo "Copy .env.template to .env and fill in your credentials"
-    exit 1
-fi
-
 # Create temporary development configuration directory
 export HASS_CONFIG_DIR="$(pwd)/temp_dev_config"
 

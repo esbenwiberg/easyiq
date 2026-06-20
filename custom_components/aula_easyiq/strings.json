@@ -28,28 +28,31 @@
   "config": {
     "error": {
       "cannot_connect": "Failed to connect to EasyIQ",
-      "invalid_auth": "Invalid authentication credentials",
+      "invalid_auth": "MitID authentication failed",
       "unknown": "Unexpected error occurred"
     },
     "step": {
       "user": {
         "data": {
-          "username": "Unilogin username",
-          "password": "Unilogin password",
+          "mitid_username": "MitID username",
           "schoolschedule": "School schedules as calendar entities",
           "weekplan": "Weekplans as sensor attributes",
           "homework": "Homework as sensor attributes",
           "presence": "Presence/attendance as sensor attributes"
         },
-        "description": "Enter your Unilogin credentials to connect to EasyIQ",
-        "title": "Authentication"
+        "description": "Enter the guardian MitID username you use for Aula. The next step opens the local MitID authorization page.",
+        "title": "MitID Authentication"
+      },
+      "mitid": {
+        "description": "Complete guardian MitID authentication in the opened browser window.",
+        "title": "Complete MitID Authentication"
       }
     }
   },
   "options": {
     "error": {
       "cannot_connect": "Failed to connect to EasyIQ",
-      "invalid_auth": "Invalid authentication credentials",
+      "invalid_auth": "MitID authentication failed",
       "unknown": "Unexpected error occurred"
     },
     "step": {

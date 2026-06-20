@@ -3,27 +3,20 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Callable
 import datetime
 import json
 
 # Import dependencies with better error handling
 aiohttp = None
-BeautifulSoup = None
 pytz = None
 requests = None
-BS4 = None
 
 # Try to import each dependency individually
 try:
     import aiohttp
 except ImportError:
     aiohttp = None
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    BeautifulSoup = None
 
 try:
     import pytz
@@ -43,9 +36,22 @@ except ImportError:
         requests = None
 
 try:
-    from bs4 import BeautifulSoup as BS4
+    from .mitid_auth import (
+        AulaTokenRefresher,
+        AulaTokenState,
+        MitIDAuthError,
+        MitIDAuthRejected,
+        TokenRefresher,
+    )
 except ImportError:
-    BS4 = None
+    # For standalone script execution from custom_components/aula_easyiq.
+    from mitid_auth import (  # type: ignore[no-redef]
+        AulaTokenRefresher,
+        AulaTokenState,
+        MitIDAuthError,
+        MitIDAuthRejected,
+        TokenRefresher,
+    )
 
 try:
     from .const import (
@@ -81,15 +87,39 @@ except ImportError:
 _LOGGER = logging.getLogger(__name__)
 
 
+class EasyIQAuthError(MitIDAuthError):
+    """Raised when EasyIQ cannot authenticate with Aula token state."""
+
+
 class EasyIQClient:
     """Client for communicating with EasyIQ API using the working CalendarGetWeekplanEvents approach."""
 
-    def __init__(self, username: str, password: str) -> None:
+    def __init__(
+        self,
+        mitid_username: str,
+        token_state: AulaTokenState | dict[str, Any],
+        *,
+        token_refresher: TokenRefresher | None = None,
+        on_token_update: Callable[[AulaTokenState], None] | None = None,
+        session_factory: Callable[[], Any] | None = None,
+    ) -> None:
         """Initialize the client."""
-        self.username = username
-        self.password = password
+        self.username = mitid_username
+        self.token_state = (
+            token_state
+            if isinstance(token_state, AulaTokenState)
+            else AulaTokenState.from_entry_data(token_state)
+        )
+        self._token_refresher = token_refresher or AulaTokenRefresher()
+        self._on_token_update = on_token_update
         self.session: aiohttp.ClientSession | None = None
-        self._session: requests.Session | None = None  # Synchronous session for auth
+        self._session: requests.Session | None = (
+            session_factory()
+            if session_factory is not None
+            else requests.Session()
+            if requests is not None
+            else None
+        )
         self._authenticated = False
         
         # Authentication data
@@ -114,6 +144,14 @@ class EasyIQClient:
         self.presence_status = {}  # Stores presence status codes (0-8)
         self.presence_data = {}    # Stores detailed presence information
 
+    def _ensure_sync_session(self) -> Any:
+        """Return an initialized synchronous requests-like session."""
+        if self._session is None:
+            if requests is None:
+                raise EasyIQAuthError("requests is not available")
+            self._session = requests.Session()
+        return self._session
+
     async def _ensure_session(self) -> aiohttp.ClientSession:
         """Ensure we have an active aiohttp session."""
         if self.session is None or self.session.closed:
@@ -132,169 +170,151 @@ class EasyIQClient:
         if self.session and not self.session.closed:
             await self.session.close()
 
-    def login(self) -> bool:
-        """Login using the proven working Aula authentication approach."""
-        if requests is None or BS4 is None:
-            _LOGGER.error("requests or BeautifulSoup not available - cannot authenticate")
-            return False
-        
+    def _ensure_valid_token(self) -> None:
+        """Refresh token state when the Aula access token is expired."""
+        if not self.token_state.is_expired():
+            return
+
         try:
-            _LOGGER.debug("Logging in")
-            self._session = requests.Session()
-            
-            # Step 1: Get initial login page (simplified approach from working Aula client)
-            headers = {
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
-                "DNT": "1",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "none",
-                "Sec-Fetch-User": "?1",
-            }
-            params = {"type": "unilogin"}
-            response = self._session.get(
-                "https://login.aula.dk/auth/login.php",
-                params=params,
-                headers=headers,
-                verify=True,
-            )
+            _LOGGER.debug("Refreshing Aula access token")
+            self.token_state = self._token_refresher.refresh(self.token_state)
+            self.tokens.clear()
+            if self._on_token_update is not None:
+                self._on_token_update(self.token_state)
+        except MitIDAuthRejected:
+            raise
+        except MitIDAuthError:
+            raise
+        except Exception as err:
+            raise EasyIQAuthError(f"Aula token refresh failed: {err}") from err
 
-            _html = BS4(response.text, "lxml")
-            _url = _html.form["action"]
-            
-            # Step 2: Submit IdP selection (simplified)
-            headers = {
-                "Host": "broker.unilogin.dk",
-                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-                "Accept-Language": "da,en-US;q=0.7,en;q=0.3",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "Origin": "null",
-                "DNT": "1",
-                "Upgrade-Insecure-Requests": "1",
-                "Sec-Fetch-Dest": "document",
-                "Sec-Fetch-Mode": "navigate",
-                "Sec-Fetch-Site": "same-origin",
-                "Sec-Fetch-User": "?1",
-            }
-            data = {"selectedIdp": "uni_idp"}
-            response = self._session.post(_url, headers=headers, data=data, verify=True)
+    def _aula_get(
+        self,
+        method: str,
+        *,
+        params: dict[str, Any] | None = None,
+        apiurl: str | None = None,
+    ) -> Any:
+        """Make a token-backed Aula API GET request."""
+        self._ensure_valid_token()
+        request_params = dict(params or {})
+        request_params["method"] = method
+        request_params["access_token"] = self.token_state.access_token
+        return self._ensure_sync_session().get(
+            apiurl or self.apiurl,
+            params=request_params,
+            verify=True,
+        )
 
-            # Step 3: Complete authentication flow (simplified from working Aula client)
-            user_data = {
-                "username": self.username,
-                "password": self.password,
-                "selected-aktoer": "KONTAKT",
-            }
-            redirects = 0
-            success = False
-            url = ""
-            while success == False and redirects < 10:
-                html = BS4(response.text, "lxml")
-                url = html.form["action"]
+    def _authenticate_sync(self) -> bool:
+        """Authenticate using stored MitID/Aula token state."""
+        self._ensure_valid_token()
 
-                post_data = {}
-                for input_elem in html.find_all("input"):
-                    if input_elem.has_attr("name") and input_elem.has_attr("value"):
-                        post_data[input_elem["name"]] = input_elem["value"]
-                        for key in user_data:
-                            if input_elem.has_attr("name") and input_elem["name"] == key:
-                                post_data[key] = user_data[key]
+        if self._authenticated:
+            return True
 
-                response = self._session.post(url, data=post_data, verify=True)
-                if response.url == "https://www.aula.dk:443/portal/":
-                    success = True
-                redirects += 1
-
-            if not success:
-                _LOGGER.error(f"Authentication failed after {redirects} redirects")
-                return False
-
-            # Step 4: Find and validate API version
+        try:
             self.apiurl = API + API_VERSION
             self.api_url = self.apiurl
             apiver = int(API_VERSION)
             api_success = False
-            while api_success == False:
-                _LOGGER.debug("Trying API at " + self.apiurl)
-                ver = self._session.get(
-                    self.apiurl + "?method=profiles.getProfilesByLogin", verify=True
+            while not api_success:
+                self.apiurl = API + str(apiver)
+                self.api_url = self.apiurl
+                _LOGGER.debug("Trying Aula API at %s", self.apiurl)
+                ver = self._aula_get(
+                    "profiles.getProfilesByLogin",
+                    apiurl=self.apiurl,
                 )
                 if ver.status_code == 410:
                     _LOGGER.debug(
-                        "API was expected at "
-                        + self.apiurl
-                        + " but responded with HTTP 410. The integration will automatically try a newer version and everything may work fine."
+                        "Aula API version %s is gone; trying the next version",
+                        apiver,
                     )
                     apiver += 1
-                elif ver.status_code == 403:
-                    _LOGGER.error("Access denied - check credentials")
-                    return False
+                elif ver.status_code in (401, 403):
+                    raise MitIDAuthRejected("Aula access token was rejected")
                 elif ver.status_code == 200:
                     ver_json = ver.json()
                     self._profiles = ver_json["data"]["profiles"]
                     api_success = True
-                self.apiurl = API + str(apiver)
-                self.api_url = self.apiurl
-            _LOGGER.debug("Found API on " + self.apiurl)
+                else:
+                    raise EasyIQAuthError(
+                        f"Aula profile discovery failed: HTTP {ver.status_code}"
+                    )
 
-            # Step 5: Get profile context and children
-            profile_response = self._session.get(
-                self.apiurl + "?method=profiles.getProfileContext&portalrole=guardian",
-                verify=True,
+            _LOGGER.debug("Found Aula API on %s", self.apiurl)
+
+            profile_response = self._aula_get(
+                "profiles.getProfileContext",
+                params={"portalrole": "guardian"},
             )
+            if profile_response.status_code in (401, 403):
+                raise MitIDAuthRejected("Aula profile context token was rejected")
+            if profile_response.status_code != 200:
+                raise EasyIQAuthError(
+                    f"Aula profile context failed: HTTP {profile_response.status_code}"
+                )
+
             profile_json = profile_response.json()
-            self._profilecontext = profile_json["data"]["institutionProfile"]["relations"]
-            
-            # Extract children data and institution profiles for compatibility
+            self._profile_context = profile_json["data"]["institutionProfile"][
+                "relations"
+            ]
+            self._profilecontext = self._profile_context
+
             self._children_data = {}
             self._childnames = {}
             self._childuserids = []
             self._childids = []
+            self._institution_profiles = []
             self.children = []
-            
-            # Extract institution profiles dynamically from auth response
+
             for profile in self._profiles:
-                # Extract institution codes from institutionProfiles
-                for institutioncode in profile["institutionProfiles"]:
+                for institutioncode in profile.get("institutionProfiles", []):
                     institution_code = str(institutioncode["institutionCode"])
                     if institution_code not in self._institution_profiles:
                         self._institution_profiles.append(institution_code)
-                
-                for child in profile["children"]:
-                    # Store both userId and id for different API calls
+
+                for child in profile.get("children", []):
                     user_id = child["userId"]
                     child_id = child["id"]
                     child_name = child["name"]
-                    
-                    # For get_children() method (uses userId)
+
                     self._childuserids.append(str(user_id))
                     self._childnames[str(user_id)] = child_name
-                    
-                    # For calendar API calls (uses id)
                     self._childids.append(str(child_id))
-                    
-                    # Store complete child data
                     self._children_data[str(user_id)] = {
                         "id": child_id,
                         "userId": user_id,
-                        "name": child_name
+                        "name": child_name,
                     }
-                    
-                    self.children.append({
-                        "id": str(user_id),  # Use userId as primary ID
-                        "name": child_name
-                    })
+                    self.children.append(
+                        {
+                            "id": str(user_id),
+                            "name": child_name,
+                        }
+                    )
 
-            _LOGGER.info(f"Found {len(self.children)} children: {[c['name'] for c in self.children]}")
-            _LOGGER.debug(f"Institution codes: {self._institution_profiles}")
-            
+            _LOGGER.info(
+                "Found %d children: %s",
+                len(self.children),
+                [child["name"] for child in self.children],
+            )
+            _LOGGER.debug("Institution codes: %s", self._institution_profiles)
+
             self._authenticated = True
             return True
-            
-        except Exception as e:
-            _LOGGER.error(f"Authentication failed: {e}")
+        except MitIDAuthError:
+            raise
+        except Exception as err:
+            raise EasyIQAuthError(f"Authentication failed: {err}") from err
+
+    def login(self) -> bool:
+        """Validate stored MitID/Aula token state and discover profile context."""
+        try:
+            return self._authenticate_sync()
+        except MitIDAuthError as err:
+            _LOGGER.error("Authentication failed: %s", err)
             return False
 
     def get_widgets(self) -> dict[str, str]:
@@ -304,9 +324,7 @@ class EasyIQClient:
             return {}
         
         try:
-            response = self._session.get(
-                self.apiurl + "?method=aulaToken.getWidgets", verify=True
-            )
+            response = self._aula_get("aulaToken.getWidgets")
             if response.status_code == 200:
                 widgets_json = response.json()
                 widgets_data = widgets_json.get("data", {})
@@ -324,7 +342,8 @@ class EasyIQClient:
             else:
                 _LOGGER.error(f"Failed to get widgets: {response.status_code}")
                 return {}
-                
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error(f"Failed to get widgets: {err}")
             return {}
@@ -345,9 +364,9 @@ class EasyIQClient:
         
         _LOGGER.debug(f"Requesting new token for widget {widget_id}")
         try:
-            response = self._session.get(
-                self.apiurl + f"?method=aulaToken.getAulaToken&widgetId={widget_id}",
-                verify=True,
+            response = self._aula_get(
+                "aulaToken.getAulaToken",
+                params={"widgetId": widget_id},
             )
             if response.status_code == 200:
                 response_json = response.json()
@@ -360,6 +379,8 @@ class EasyIQClient:
             else:
                 _LOGGER.error(f"Failed to get token for widget {widget_id}: {response.status_code}")
                 return ""
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error(f"Failed to get token for widget {widget_id}: {err}")
             return ""
@@ -377,6 +398,8 @@ class EasyIQClient:
             # Run the synchronous calendar request in an executor to avoid blocking
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id, weeks_ahead)
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get calendar events: %s", err)
             return []
@@ -511,7 +534,9 @@ class EasyIQClient:
             _LOGGER.debug("Calendar events request - Params: %s", params)
             
             # Make the request using the authenticated session
-            response = self._session.get(url, params=params, headers=headers, verify=True)
+            response = self._ensure_sync_session().get(
+                url, params=params, headers=headers, verify=True
+            )
             
             if response.status_code == 200:
                 try:
@@ -571,6 +596,8 @@ class EasyIQClient:
                 _LOGGER.debug(f"Error response: {response.text[:200]}...")
                 return []
                 
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get calendar events: %s", err)
             return []
@@ -629,6 +656,8 @@ class EasyIQClient:
                 "raw_data": events
             }
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get weekplan for child %s: %s", child_id, err)
             return {}
@@ -686,6 +715,8 @@ class EasyIQClient:
                 "raw_data": events
             }
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get homework for child %s: %s", child_id, err)
             return {}
@@ -700,6 +731,8 @@ class EasyIQClient:
             # Run the synchronous message request in an executor to avoid blocking
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self._sync_get_messages)
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get messages: %s", err)
             return {}
@@ -709,9 +742,13 @@ class EasyIQClient:
         try:
             # Get message threads from Aula API
             _LOGGER.debug("Fetching message threads...")
-            mesres = self._session.get(
-                self.apiurl + "?method=messaging.getThreads&sortOn=date&orderDirection=desc&page=0",
-                verify=True,
+            mesres = self._aula_get(
+                "messaging.getThreads",
+                params={
+                    "sortOn": "date",
+                    "orderDirection": "desc",
+                    "page": 0,
+                },
             )
             
             if mesres.status_code != 200:
@@ -741,9 +778,12 @@ class EasyIQClient:
             # If we have an unread message, get its content
             if unread == 1 and threadid:
                 _LOGGER.debug(f"Fetching message content for thread: {threadid}")
-                threadres = self._session.get(
-                    self.apiurl + f"?method=messaging.getMessagesForThread&threadId={threadid}&page=0",
-                    verify=True,
+                threadres = self._aula_get(
+                    "messaging.getMessagesForThread",
+                    params={
+                        "threadId": threadid,
+                        "page": 0,
+                    },
                 )
                 
                 if threadres.status_code == 200:
@@ -794,6 +834,8 @@ class EasyIQClient:
             _LOGGER.debug(f"Messages check complete: {self.unread_messages} unread messages")
             return self.message
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error(f"Error getting messages: {err}")
             return {}
@@ -819,12 +861,7 @@ class EasyIQClient:
             actual_child_id = child_data.get("id", child_id)
             _LOGGER.debug(f"Child {child_id} -> using actual_child_id: {actual_child_id} for presence API call")
             
-            # Use the proper presence API endpoint
-            url = f"{API}{API_VERSION}/"
-            params = {
-                "method": "presence.getDailyOverview",
-                f"childIds[]": actual_child_id
-            }
+            params = {f"childIds[]": actual_child_id}
             
             _LOGGER.debug("Fetching presence data for child %s (actual ID: %s)", child_id, actual_child_id)
             
@@ -833,7 +870,7 @@ class EasyIQClient:
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self._session.get(url, params=params, verify=True)
+                lambda: self._aula_get("presence.getDailyOverview", params=params)
             )
             
             if response.status_code != 200:
@@ -903,6 +940,8 @@ class EasyIQClient:
                 "last_updated": datetime.datetime.now().isoformat()
             }
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to get presence for child %s: %s", child_id, err)
             return {
@@ -915,9 +954,7 @@ class EasyIQClient:
         """Update all data from the API using business days approach."""
         try:
             # First authenticate if not already authenticated
-            if not await self.authenticate():
-                _LOGGER.error("Failed to authenticate - cannot update data")
-                return
+            await self.authenticate()
             
             # Update children data
             self.children = await self.get_children()
@@ -991,6 +1028,8 @@ class EasyIQClient:
                         
                         _LOGGER.info(f"Updated data for {child_name}: {len(weekplan_events)} weekplan events, {len(homework_events)} homework events")
                         
+                    except MitIDAuthError:
+                        raise
                     except Exception as child_err:
                         _LOGGER.error(f"Failed to update data for child {child_name}: {child_err}", exc_info=True)
                         # Set empty data for this child to avoid errors but keep integration running
@@ -1023,6 +1062,8 @@ class EasyIQClient:
             _LOGGER.debug(f"  Homework data keys: {list(self.homework_data.keys())}")
             _LOGGER.debug(f"  Presence data keys: {list(self.presence_data.keys())}")
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to update data: %s", err)
             raise
@@ -1039,9 +1080,7 @@ class EasyIQClient:
         """Update specific data types from the API based on flags."""
         try:
             # First authenticate if not already authenticated
-            if not await self.authenticate():
-                _LOGGER.error("Failed to authenticate - cannot update data")
-                return
+            await self.authenticate()
             
             # Always update children data (lightweight operation)
             self.children = await self.get_children()
@@ -1110,6 +1149,8 @@ class EasyIQClient:
                                 }
                                 _LOGGER.debug(f"Updated homework for {child_name}: {len(homework_events)} assignments")
                                 
+                        except MitIDAuthError:
+                            raise
                         except Exception as calendar_err:
                             _LOGGER.error(f"Failed to update calendar data for child {child_name}: {calendar_err}")
                     
@@ -1118,6 +1159,8 @@ class EasyIQClient:
                         try:
                             self.presence_data[child_id] = await self.get_presence(child_id)
                             _LOGGER.debug(f"Updated presence for {child_name}")
+                        except MitIDAuthError:
+                            raise
                         except Exception as presence_err:
                             _LOGGER.error(f"Failed to update presence for child {child_name}: {presence_err}")
             
@@ -1127,11 +1170,15 @@ class EasyIQClient:
                     self.message = await self.get_messages()
                     self.unread_messages = self.message.get("unread_count", 0) if isinstance(self.message, dict) else 0
                     _LOGGER.debug(f"Updated messages: {self.unread_messages} unread")
+                except MitIDAuthError:
+                    raise
                 except Exception as messages_err:
                     _LOGGER.error(f"Failed to update messages: {messages_err}")
             
             _LOGGER.debug("Selective data update completed successfully")
             
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Failed to update data selectively: %s", err)
             raise
@@ -1251,10 +1298,12 @@ class EasyIQClient:
     async def authenticate(self) -> bool:
         """Authenticate with the EasyIQ API using async approach."""
         try:
-            # Run the synchronous login in an executor to avoid blocking
+            # Run synchronous token validation/profile discovery in an executor.
             loop = asyncio.get_event_loop()
-            result = await loop.run_in_executor(None, self.login)
+            result = await loop.run_in_executor(None, self._authenticate_sync)
             return result
+        except MitIDAuthError:
+            raise
         except Exception as err:
             _LOGGER.error("Unexpected error during authentication: %s", err)
-            return False
+            raise EasyIQAuthError(f"Unexpected auth error: {err}") from err

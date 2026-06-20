@@ -25,19 +25,25 @@ def load_env_file():
                         key, value = line.split("=", 1)
                         os.environ[key] = value
 
-def check_credentials():
-    """Check if credentials are set."""
-    username = os.getenv("EASYIQ_USERNAME")
-    password = os.getenv("EASYIQ_PASSWORD")
+def check_token_state():
+    """Check if optional MitID token state is set."""
+    required = {
+        "EASYIQ_MITID_USERNAME": os.getenv("EASYIQ_MITID_USERNAME"),
+        "EASYIQ_ACCESS_TOKEN": os.getenv("EASYIQ_ACCESS_TOKEN"),
+        "EASYIQ_REFRESH_TOKEN": os.getenv("EASYIQ_REFRESH_TOKEN"),
+        "EASYIQ_TOKEN_EXPIRES_AT": os.getenv("EASYIQ_TOKEN_EXPIRES_AT"),
+    }
     
-    print("🔐 Checking credentials...")
-    if not username or not password:
-        print("❌ Credentials not found!")
-        print("   Please copy .env.template to .env and fill in your credentials")
+    print("🔐 Checking MitID token state...")
+    missing = [key for key, value in required.items() if not value]
+    if missing:
+        print("❌ Optional live smoke token state not found!")
+        print("   Fill MitID token fields in .env only when running live smoke tests")
+        print(f"   Missing: {', '.join(missing)}")
         return False
     
-    print(f"✅ Username: {username}")
-    print(f"✅ Password: {'*' * len(password)}")
+    print(f"✅ MitID username: {required['EASYIQ_MITID_USERNAME']}")
+    print("✅ Aula token fields are present")
     return True
 
 def check_file_structure():
@@ -179,8 +185,8 @@ def show_integration_status():
     print("📊 Integration Status:")
     print("-" * 50)
     
-    # Check credentials
-    creds_ok = check_credentials()
+    # Check optional live token state
+    token_state_ok = check_token_state()
     print()
     
     # Check file structure
@@ -197,12 +203,12 @@ def show_integration_status():
     
     # Overall status
     print("📋 Summary:")
-    print(f"   Credentials: {'✅' if creds_ok else '❌'}")
+    print(f"   MitID token state: {'✅' if token_state_ok else '❌'}")
     print(f"   File Structure: {'✅' if files_ok else '❌'}")
     print(f"   JSON Files: {'✅' if json_ok else '❌'}")
     print(f"   Python Syntax: {'✅' if syntax_ok else '❌'}")
     
-    if all([creds_ok, files_ok, json_ok, syntax_ok]):
+    if all([files_ok, json_ok, syntax_ok]):
         print("\n🎉 Everything looks good! Ready for testing.")
         return True
     else:
@@ -216,7 +222,7 @@ def show_menu():
     print("="*60)
     print("1. Check Integration Status")
     print("2. Test API Client (Standalone)")
-    print("3. Validate Credentials")
+    print("3. Validate MitID Token State")
     print("4. Check File Structure")
     print("5. Validate JSON Files")
     print("6. Test Python Syntax")
@@ -229,7 +235,7 @@ def show_debug_tips():
     """Show debugging tips."""
     print("\n💡 Debug Tips:")
     print("-" * 40)
-    print("• Always test credentials first with option 2")
+    print("• Run ./scripts/validate.sh before live smoke testing")
     print("• Check logs in terminal when running dev server")
     print("• Use Home Assistant web UI: Settings → System → Logs")
     print("• Look for 'custom_components.aula_easyiq' in logs")
@@ -276,7 +282,7 @@ def main():
             elif choice == "2":
                 run_client_test()
             elif choice == "3":
-                check_credentials()
+                check_token_state()
             elif choice == "4":
                 check_file_structure()
             elif choice == "5":

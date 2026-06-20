@@ -1,0 +1,208 @@
+from __future__ import annotations
+
+import asyncio
+import importlib.util
+import sys
+import time
+import unittest
+from pathlib import Path
+from typing import Any
+
+
+ROOT = Path(__file__).resolve().parents[2]
+INTEGRATION_DIR = ROOT / "custom_components" / "aula_easyiq"
+
+
+def load_module(name: str, filename: str):
+    sys.path.insert(0, str(INTEGRATION_DIR))
+    spec = importlib.util.spec_from_file_location(name, INTEGRATION_DIR / filename)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+mitid_auth = load_module("mitid_auth", "mitid_auth.py")
+client_module = load_module("easyiq_client_token_test", "client.py")
+
+
+class FakeResponse:
+    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
+        self._payload = payload
+        self.status_code = status_code
+        self.headers: dict[str, str] = {}
+        self.content = b""
+        self.text = ""
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        params = dict(kwargs.get("params") or {})
+        self.calls.append({"url": url, "params": params, "headers": kwargs.get("headers")})
+        method = params.get("method")
+
+        if method == "profiles.getProfilesByLogin":
+            return FakeResponse(
+                {
+                    "data": {
+                        "profiles": [
+                            {
+                                "institutionProfiles": [{"institutionCode": 123}],
+                                "children": [
+                                    {"userId": 100, "id": 200, "name": "Ada"}
+                                ],
+                            }
+                        ]
+                    }
+                }
+            )
+
+        if method == "profiles.getProfileContext":
+            return FakeResponse(
+                {"data": {"institutionProfile": {"relations": [{"id": 200}]}}}
+            )
+
+        if method == "aulaToken.getWidgets":
+            return FakeResponse(
+                {"data": [{"widgetId": "0128", "widgetName": "Weekplan"}]}
+            )
+
+        if method == "aulaToken.getAulaToken":
+            return FakeResponse({"data": "widget-token"})
+
+        if method == "messaging.getThreads":
+            return FakeResponse({"data": {"threads": [{"id": 55, "read": False}]}})
+
+        if method == "messaging.getMessagesForThread":
+            return FakeResponse(
+                {
+                    "data": {
+                        "subject": "Hello",
+                        "messages": [
+                            {
+                                "messageType": "Message",
+                                "text": {"html": "Body"},
+                                "sender": {"fullName": "Teacher"},
+                            }
+                        ],
+                    }
+                }
+            )
+
+        if method == "presence.getDailyOverview":
+            return FakeResponse(
+                {
+                    "status": {"code": 0},
+                    "data": [
+                        {
+                            "institutionProfile": {"id": 200},
+                            "status": 3,
+                            "checkInTime": "08:00:00",
+                        }
+                    ],
+                }
+            )
+
+        return FakeResponse({}, status_code=404)
+
+
+class RecordingRefresher:
+    def __init__(self, token_state: Any | None = None, fail: Exception | None = None) -> None:
+        self.token_state = token_state
+        self.fail = fail
+        self.calls = 0
+
+    def refresh(self, token_state: Any) -> Any:
+        self.calls += 1
+        if self.fail is not None:
+            raise self.fail
+        return self.token_state
+
+
+class EasyIQTokenAuthTests(unittest.TestCase):
+    def test_token_backed_aula_api_requests_include_access_token(self) -> None:
+        fake_session = FakeSession()
+        token_state = mitid_auth.AulaTokenState(
+            access_token="access-123",
+            refresh_token="refresh-123",
+            expires_at=time.time() + 3600,
+        )
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            token_state,
+            session_factory=lambda: fake_session,
+        )
+
+        self.assertTrue(client.login())
+        client.get_widgets()
+        self.assertEqual("Bearer widget-token", client.get_token("0128"))
+        asyncio.run(client.get_messages())
+        presence = asyncio.run(client.get_presence("100"))
+
+        self.assertEqual("KOMMET/TIL STEDE", presence["status"])
+        methods = {
+            call["params"].get("method"): call["params"].get("access_token")
+            for call in fake_session.calls
+            if call["params"].get("method")
+        }
+        self.assertEqual("access-123", methods["profiles.getProfilesByLogin"])
+        self.assertEqual("access-123", methods["profiles.getProfileContext"])
+        self.assertEqual("access-123", methods["aulaToken.getWidgets"])
+        self.assertEqual("access-123", methods["aulaToken.getAulaToken"])
+        self.assertEqual("access-123", methods["messaging.getThreads"])
+        self.assertEqual("access-123", methods["messaging.getMessagesForThread"])
+        self.assertEqual("access-123", methods["presence.getDailyOverview"])
+        self.assertEqual([{"id": "100", "name": "Ada"}], client.children)
+
+    def test_token_refresh_and_reauth(self) -> None:
+        fake_session = FakeSession()
+        refreshed = mitid_auth.AulaTokenState(
+            access_token="new-access",
+            refresh_token="new-refresh",
+            expires_at=time.time() + 3600,
+        )
+        updates: list[Any] = []
+        refresher = RecordingRefresher(refreshed)
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="old-access",
+                refresh_token="old-refresh",
+                expires_at=time.time() - 10,
+            ),
+            token_refresher=refresher,
+            on_token_update=updates.append,
+            session_factory=lambda: fake_session,
+        )
+
+        self.assertTrue(client.login())
+        self.assertEqual(1, refresher.calls)
+        self.assertEqual([refreshed], updates)
+        self.assertEqual("new-access", fake_session.calls[0]["params"]["access_token"])
+
+        failing_client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="old-access",
+                refresh_token="old-refresh",
+                expires_at=time.time() - 10,
+            ),
+            token_refresher=RecordingRefresher(
+                fail=mitid_auth.MitIDAuthRejected("refresh rejected")
+            ),
+            session_factory=lambda: FakeSession(),
+        )
+
+        with self.assertRaises(mitid_auth.MitIDAuthRejected):
+            failing_client._authenticate_sync()
+
+
+if __name__ == "__main__":
+    unittest.main()

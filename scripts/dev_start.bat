@@ -10,22 +10,7 @@ if exist .env (
         )
     )
 ) else (
-    echo .env file not found. Copy .env.template to .env and fill in your credentials.
-    pause
-    exit /b 1
-)
-
-REM Check if credentials are set
-if "%EASYIQ_USERNAME%"=="" (
-    echo Error: EASYIQ_USERNAME must be set in .env file
-    pause
-    exit /b 1
-)
-
-if "%EASYIQ_PASSWORD%"=="" (
-    echo Error: EASYIQ_PASSWORD must be set in .env file
-    pause
-    exit /b 1
+    echo .env file not found; continuing with defaults.
 )
 
 REM Set default values if not set
