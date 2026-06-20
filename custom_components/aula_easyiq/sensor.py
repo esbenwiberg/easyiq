@@ -257,6 +257,8 @@ class EasyIQChildSensor(CoordinatorEntity, SensorEntity):
             attributes.update({
                 "week": weekplan_data.get('week', 'Unknown'),
                 "events_count": len(weekplan_data.get('events', [])),
+                "raw_event_count": weekplan_data.get('raw_event_count', len(weekplan_data.get('raw_data', []))),
+                "event_type_counts": weekplan_data.get('event_type_counts', {}),
                 "html_content": weekplan_data.get('html_content', ''),
                 "last_updated": weekplan_data.get('last_updated', 'Unknown')
             })
@@ -304,6 +306,11 @@ class EasyIQWeekplanSensor(CoordinatorEntity, SensorEntity):
             if isinstance(events, list):
                 limited_weekplan["events"] = events[:10]
                 limited_weekplan["total_events"] = len(events)
+            limited_weekplan["raw_event_count"] = weekplan_data.get(
+                "raw_event_count",
+                len(weekplan_data.get("raw_data", [])),
+            )
+            limited_weekplan["event_type_counts"] = weekplan_data.get("event_type_counts", {})
             
             # Include summary information
             limited_weekplan["last_updated"] = weekplan_data.get("last_updated")
@@ -338,4 +345,3 @@ class EasyIQStatusSensor(CoordinatorEntity, SensorEntity):
             "last_update_success": self.coordinator.last_update_success,
             "last_exception": str(self.coordinator.last_exception) if self.coordinator.last_exception else None,
         }
-

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import importlib.util
 import sys
 import time
@@ -200,6 +201,12 @@ class RecordingRefresher:
 
 
 class EasyIQTokenAuthTests(unittest.TestCase):
+    def _next_business_date(self) -> datetime.date:
+        check_date = datetime.datetime.now().date()
+        while check_date.weekday() >= 5:
+            check_date += datetime.timedelta(days=1)
+        return check_date
+
     def test_token_backed_aula_api_requests_include_access_token(self) -> None:
         fake_session = FakeSession()
         token_state = mitid_auth.AulaTokenState(
@@ -333,6 +340,106 @@ class EasyIQTokenAuthTests(unittest.TestCase):
             "guardian-42",
             client._calendar_request_variant_cache["100"]["x_login"],
         )
+
+    def test_calendar_filter_accepts_iso_event_dates(self) -> None:
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="access-123",
+                refresh_token="refresh-123",
+                expires_at=time.time() + 3600,
+            ),
+            session_factory=lambda: FakeSession(),
+        )
+        next_business_date = self._next_business_date()
+
+        events = client._filter_events_by_days(
+            [
+                {
+                    "itemType": 9,
+                    "start": f"{next_business_date.isoformat()}T08:00:00Z",
+                    "courses": "Math",
+                }
+            ],
+            1,
+        )
+
+        self.assertEqual(1, len(events))
+        self.assertEqual("Math", events[0]["courses"])
+
+    def test_event_type_filter_accepts_string_item_type(self) -> None:
+        events = client_module._events_of_type(
+            [
+                {
+                    "itemType": "9",
+                    "start": "2026-06-22T08:00:00Z",
+                    "courses": "Math",
+                }
+            ],
+            9,
+        )
+
+        self.assertEqual(1, len(events))
+        self.assertEqual("Math", events[0]["courses"])
+
+    def test_weekplan_html_groups_iso_event_dates(self) -> None:
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="access-123",
+                refresh_token="refresh-123",
+                expires_at=time.time() + 3600,
+            ),
+            session_factory=lambda: FakeSession(),
+        )
+        next_business_date = self._next_business_date()
+
+        html = client._build_weekplan_html(
+            [
+                {
+                    "itemType": 9,
+                    "start": f"{next_business_date.isoformat()}T08:00:00Z",
+                    "end": f"{next_business_date.isoformat()}T09:00:00Z",
+                    "courses": "Math",
+                }
+            ],
+            1,
+        )
+
+        self.assertIn("Math", html)
+        self.assertIn("08:00", html)
+
+    def test_calendar_response_wrapper_extracts_event_list(self) -> None:
+        events = client_module._extract_calendar_event_list(
+            {
+                "data": [
+                    {
+                        "itemType": 9,
+                        "start": "2026-06-22T08:00:00Z",
+                        "courses": "Math",
+                    }
+                ]
+            }
+        )
+
+        self.assertEqual("Math", events[0]["courses"])
+
+    def test_calendar_response_nested_wrapper_extracts_event_list(self) -> None:
+        events = client_module._extract_calendar_event_list(
+            {
+                "result": {
+                    "calendarEvents": [
+                        {
+                            "itemType": 9,
+                            "start": "2026-06-22T08:00:00Z",
+                            "courses": "Math",
+                        }
+                    ]
+                }
+            }
+        )
+
+        self.assertEqual("Math", events[0]["courses"])
 
 
 if __name__ == "__main__":

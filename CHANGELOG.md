@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.10] - 2026-06-21
+
+### Fixed
+- Accept ISO calendar timestamps, nested calendar response wrappers, and string item types so valid EasyIQ events are not silently filtered out
+- Surface raw calendar event counts and EasyIQ item type counts on weekplan sensor attributes to diagnose empty-data responses
+
 ## [0.5.9] - 2026-06-21
 
 ### Fixed

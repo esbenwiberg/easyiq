@@ -88,6 +88,117 @@ except ImportError:
 _LOGGER = logging.getLogger(__name__)
 
 
+def _parse_easyiq_datetime(value: Any) -> datetime.datetime | None:
+    """Parse EasyIQ calendar date strings in known legacy and ISO formats."""
+    if not value:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace("Z", "+00:00")
+    try:
+        return datetime.datetime.fromisoformat(normalized)
+    except ValueError:
+        pass
+
+    for date_format in (
+        "%Y/%m/%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.datetime.strptime(text, date_format)
+        except ValueError:
+            continue
+
+    return None
+
+
+def _event_date(value: Any) -> datetime.date | None:
+    """Return the calendar date for an EasyIQ event timestamp."""
+    parsed = _parse_easyiq_datetime(value)
+    if parsed is not None:
+        return parsed.date()
+    return None
+
+
+def _event_time_text(value: Any) -> str:
+    """Return a readable time for an EasyIQ event timestamp."""
+    parsed = _parse_easyiq_datetime(value)
+    if parsed is not None:
+        return parsed.strftime("%H:%M")
+    text = str(value or "")
+    if " " in text:
+        return text.split(" ", 1)[1]
+    if "T" in text:
+        return text.split("T", 1)[1].replace("Z", "")[:5]
+    return text
+
+
+def _event_item_type(event: dict[str, Any]) -> int | None:
+    """Return the EasyIQ item type as an integer when present."""
+    for key in ("itemType", "itemTypeId"):
+        value = event.get(key)
+        if isinstance(value, dict):
+            value = value.get("id", value.get("value"))
+
+        if isinstance(value, bool) or value is None:
+            continue
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                continue
+
+    return None
+
+
+def _events_of_type(events: list[dict[str, Any]], item_type: int) -> list[dict[str, Any]]:
+    """Return EasyIQ events matching a normalized item type."""
+    return [event for event in events if _event_item_type(event) == item_type]
+
+
+def _event_type_counts(events: list[dict[str, Any]]) -> dict[str, int]:
+    """Return a compact item type histogram for diagnostics."""
+    counts: dict[str, int] = {}
+    for event in events:
+        item_type = _event_item_type(event)
+        key = "missing" if item_type is None else str(item_type)
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _extract_calendar_event_list(payload: Any) -> list[dict[str, Any]]:
+    """Normalize known EasyIQ calendar response wrappers to a list of events."""
+    if isinstance(payload, list):
+        return [event for event in payload if isinstance(event, dict)]
+    if isinstance(payload, dict):
+        for key in (
+            "events",
+            "calendarEvents",
+            "items",
+            "data",
+            "value",
+            "result",
+            "results",
+        ):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [event for event in value if isinstance(event, dict)]
+            if isinstance(value, dict):
+                nested_events = _extract_calendar_event_list(value)
+                if nested_events:
+                    return nested_events
+    return []
+
+
 class EasyIQAuthError(MitIDAuthError):
     """Raised when EasyIQ cannot authenticate with Aula token state."""
 
@@ -525,10 +636,9 @@ class EasyIQClient:
                 # Skip weekends (Saturday=5, Sunday=6)
                 if check_date.weekday() < 5:  # Monday=0 to Friday=4
                     # Find events for this business day
-                    date_str = check_date.strftime("%Y/%m/%d")
                     day_events = [
                         event for event in all_events 
-                        if event.get("start", "").startswith(date_str)
+                        if _event_date(event.get("start")) == check_date
                     ]
                     business_day_events.extend(day_events)
                     business_days_found += 1
@@ -537,7 +647,14 @@ class EasyIQClient:
                 check_date += datetime.timedelta(days=1)
             
             week_desc = "current week" if weeks_ahead == 0 else f"{weeks_ahead} week{'s' if weeks_ahead > 1 else ''} ahead"
-            _LOGGER.info(f"Found {len(business_day_events)} events for next {days} business days starting from {week_desc}")
+            _LOGGER.info(
+                "Found %d events for next %d business days starting from %s "
+                "(raw calendar events: %d)",
+                len(business_day_events),
+                days,
+                week_desc,
+                len(all_events),
+            )
             return business_day_events
             
         except Exception as err:
@@ -753,7 +870,7 @@ class EasyIQClient:
                     # Let requests handle decompression automatically (including Brotli)
                     # This is more reliable than manual decompression
                     try:
-                        events = response.json()
+                        events = _extract_calendar_event_list(response.json())
                         _LOGGER.debug(f"Successfully parsed JSON response with {len(events)} events")
                     except Exception as json_error:
                         _LOGGER.error(f"Failed to parse JSON response: {json_error}")
@@ -766,7 +883,7 @@ class EasyIQClient:
                                 decompressed_content = brotli.decompress(response.content)
                                 json_text = decompressed_content.decode('utf-8')
                                 import json
-                                events = json.loads(json_text)
+                                events = _extract_calendar_event_list(json.loads(json_text))
                                 _LOGGER.debug("Manual Brotli decompression successful")
                             except Exception as decomp_error:
                                 _LOGGER.debug(f"Manual Brotli decompression also failed: {decomp_error}")
@@ -836,10 +953,17 @@ class EasyIQClient:
             # Get calendar events (contains both weekplan and homework)
             events = await self._get_calendar_events(child_id)
             if not events:
-                return {}
+                return {
+                    "week": "No calendar events",
+                    "html_content": "<p>No scheduled events found.</p>",
+                    "events": [],
+                    "raw_data": [],
+                    "raw_event_count": 0,
+                    "event_type_counts": {},
+                }
             
             # Filter for weekplan events (itemType 9 = schedule events)
-            weekplan_events = [event for event in events if event.get("itemType") == 9]
+            weekplan_events = _events_of_type(events, 9)
             
             # Process weekplan events
             current_date = datetime.datetime.now()
@@ -869,7 +993,9 @@ class EasyIQClient:
                 "week": f"Week {week_num}",
                 "html_content": weekplan_html,
                 "events": weekplan_events,
-                "raw_data": events
+                "raw_data": events,
+                "raw_event_count": len(events),
+                "event_type_counts": _event_type_counts(events),
             }
             
         except MitIDAuthError:
@@ -888,10 +1014,17 @@ class EasyIQClient:
             # Get calendar events (contains both weekplan and homework)
             events = await self._get_calendar_events(child_id)
             if not events:
-                return {}
+                return {
+                    "week": "No calendar events",
+                    "html_content": "<p>No homework assignments found.</p>",
+                    "assignments": [],
+                    "raw_data": [],
+                    "raw_event_count": 0,
+                    "event_type_counts": {},
+                }
             
             # Filter for homework events (itemType 4 = homework/assignments)
-            homework_events = [event for event in events if event.get("itemType") == 4]
+            homework_events = _events_of_type(events, 4)
             
             # Process homework events
             current_date = datetime.datetime.now()
@@ -928,7 +1061,9 @@ class EasyIQClient:
                 "week": f"Week {week_num}",
                 "html_content": homework_html,
                 "assignments": assignments,
-                "raw_data": events
+                "raw_data": events,
+                "raw_event_count": len(events),
+                "event_type_counts": _event_type_counts(events),
             }
             
         except MitIDAuthError:
@@ -1216,8 +1351,8 @@ class EasyIQClient:
                         business_day_events = await self.get_calendar_events_for_business_days(child_id, max_days)
                         
                         # Separate weekplan and homework events
-                        all_weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
-                        all_homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                        all_weekplan_events = _events_of_type(business_day_events, 9)
+                        all_homework_events = _events_of_type(business_day_events, 4)
                         
                         # Filter events based on configured days
                         weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
@@ -1229,7 +1364,9 @@ class EasyIQClient:
                             "week": weekplan_desc,
                             "events": weekplan_events,
                             "html_content": self._build_weekplan_html(weekplan_events, weekplan_days),
-                            "raw_data": business_day_events
+                            "raw_data": business_day_events,
+                            "raw_event_count": len(business_day_events),
+                            "event_type_counts": _event_type_counts(business_day_events),
                         }
                         
                         # Store homework data
@@ -1250,13 +1387,23 @@ class EasyIQClient:
                             "week": homework_desc,
                             "assignments": homework_assignments,
                             "html_content": self._build_homework_html(homework_assignments, homework_days),
-                            "raw_data": business_day_events
+                            "raw_data": business_day_events,
+                            "raw_event_count": len(business_day_events),
+                            "event_type_counts": _event_type_counts(business_day_events),
                         }
                         
                         # Get presence data for this child
                         self.presence_data[child_id] = await self.get_presence(child_id)
                         
-                        _LOGGER.info(f"Updated data for {child_name}: {len(weekplan_events)} weekplan events, {len(homework_events)} homework events")
+                        _LOGGER.info(
+                            "Updated data for %s: %d raw events, %d weekplan "
+                            "events, %d homework events, item types: %s",
+                            child_name,
+                            len(business_day_events),
+                            len(weekplan_events),
+                            len(homework_events),
+                            _event_type_counts(business_day_events),
+                        )
                         
                     except MitIDAuthError:
                         raise
@@ -1338,10 +1485,15 @@ class EasyIQClient:
                             # Use the maximum of weekplan_days and homework_days to get all needed events
                             max_days = max(weekplan_days, homework_days)
                             business_day_events = await self.get_calendar_events_for_business_days(child_id, max_days)
+                            _LOGGER.info(
+                                "Calendar data for %s: %d raw business-day events",
+                                child_name,
+                                len(business_day_events),
+                            )
                             
                             if update_weekplan:
                                 # Separate and filter weekplan events
-                                all_weekplan_events = [event for event in business_day_events if event.get("itemType") == 9]
+                                all_weekplan_events = _events_of_type(business_day_events, 9)
                                 weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
                                 weekplan_desc = f"Next {weekplan_days} Business Day{'s' if weekplan_days != 1 else ''}"
                                 self.weekplan_data[child_id] = {
@@ -1349,13 +1501,19 @@ class EasyIQClient:
                                     "events": weekplan_events,
                                     "html_content": self._build_weekplan_html(weekplan_events, weekplan_days),
                                     "raw_data": business_day_events,
+                                    "raw_event_count": len(business_day_events),
+                                    "event_type_counts": _event_type_counts(business_day_events),
                                     "last_updated": datetime.datetime.now().isoformat()
                                 }
-                                _LOGGER.debug(f"Updated weekplan for {child_name}: {len(weekplan_events)} events")
+                                _LOGGER.info(
+                                    "Updated weekplan for %s: %d events after filtering",
+                                    child_name,
+                                    len(weekplan_events),
+                                )
                             
                             if update_homework:
                                 # Separate and filter homework events
-                                all_homework_events = [event for event in business_day_events if event.get("itemType") == 4]
+                                all_homework_events = _events_of_type(business_day_events, 4)
                                 homework_events = self._filter_events_by_days(all_homework_events, homework_days)
                                 homework_assignments = []
                                 for event in homework_events:
@@ -1375,9 +1533,15 @@ class EasyIQClient:
                                     "assignments": homework_assignments,
                                     "html_content": self._build_homework_html(homework_assignments, homework_days),
                                     "raw_data": business_day_events,
+                                    "raw_event_count": len(business_day_events),
+                                    "event_type_counts": _event_type_counts(business_day_events),
                                     "last_updated": datetime.datetime.now().isoformat()
                                 }
-                                _LOGGER.debug(f"Updated homework for {child_name}: {len(homework_events)} assignments")
+                                _LOGGER.info(
+                                    "Updated homework for %s: %d assignments after filtering",
+                                    child_name,
+                                    len(homework_events),
+                                )
                                 
                         except MitIDAuthError:
                             raise
@@ -1432,18 +1596,16 @@ class EasyIQClient:
         while business_days_found < days:
             # Skip weekends (Saturday=5, Sunday=6)
             if check_date.weekday() < 5:  # Monday=0 to Friday=4
-                target_dates.append(check_date.strftime("%Y/%m/%d"))
+                target_dates.append(check_date)
                 business_days_found += 1
             check_date += datetime.timedelta(days=1)
         
         # Filter events to only include those on target dates
         filtered_events = []
         for event in events:
-            start_time = event.get("start", "")
-            if start_time:
-                date_part = start_time.split(" ")[0]  # Get "2025/09/15" part
-                if date_part in target_dates:
-                    filtered_events.append(event)
+            event_start_date = _event_date(event.get("start"))
+            if event_start_date in target_dates:
+                filtered_events.append(event)
         
         return filtered_events
 
@@ -1459,23 +1621,19 @@ class EasyIQClient:
         # Group events by date
         events_by_date = {}
         for event in weekplan_events:
-            start_time = event.get("start", "")
-            if start_time:
-                date_part = start_time.split(" ")[0]  # Get "2025/09/15" part
-                if date_part not in events_by_date:
-                    events_by_date[date_part] = []
-                events_by_date[date_part].append(event)
+            event_start_date = _event_date(event.get("start"))
+            if event_start_date:
+                events_by_date.setdefault(event_start_date, []).append(event)
         
         # Sort dates and build HTML
-        for date_str in sorted(events_by_date.keys()):
+        for date_obj in sorted(events_by_date.keys()):
             try:
                 # Convert to readable date format
-                date_obj = datetime.datetime.strptime(date_str, "%Y/%m/%d")
                 readable_date = date_obj.strftime("%A, %B %d, %Y")
                 html += f"<h3>{readable_date}</h3>"
                 
                 # Sort events by time for this date
-                day_events = sorted(events_by_date[date_str], key=lambda x: x.get("start", ""))
+                day_events = sorted(events_by_date[date_obj], key=lambda x: str(x.get("start", "")))
                 
                 for event in day_events:
                     start_time = event.get("start", "")
@@ -1485,8 +1643,8 @@ class EasyIQClient:
                     description = event.get("description", "")
                     
                     # Extract time part
-                    start_time_part = start_time.split(" ")[1] if " " in start_time else start_time
-                    end_time_part = end_time.split(" ")[1] if " " in end_time else end_time
+                    start_time_part = _event_time_text(start_time)
+                    end_time_part = _event_time_text(end_time)
                     
                     html += f"<p><b>{start_time_part} - {end_time_part}</b><br>"
                     html += f"<b>{courses}</b>"

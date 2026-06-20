@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
-import pytz
 
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.config_entries import ConfigEntry
@@ -15,6 +14,39 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _parse_easyiq_datetime(value: Any) -> datetime | None:
+    """Parse EasyIQ calendar date strings in known legacy and ISO formats."""
+    if not value:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    normalized = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is not None:
+            return dt_util.as_local(parsed)
+        return dt_util.as_local(parsed.replace(tzinfo=dt_util.UTC))
+    except ValueError:
+        pass
+
+    for date_format in (
+        "%Y/%m/%d %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            parsed = datetime.strptime(text, date_format)
+            return dt_util.as_local(parsed.replace(tzinfo=dt_util.UTC))
+        except ValueError:
+            continue
+
+    return None
 
 
 async def async_setup_entry(
@@ -147,14 +179,12 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
             if not start_str:
                 return None
             
-            # Convert from "2025/09/15 08:05" format to timezone-aware datetime
-            event_start = datetime.strptime(start_str, "%Y/%m/%d %H:%M")
-            event_end = datetime.strptime(end_str, "%Y/%m/%d %H:%M") if end_str else event_start
-            
-            # Make timezone-aware using Home Assistant's timezone utilities
-            # This avoids blocking calls to pytz.timezone
-            event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
-            event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
+            event_start = _parse_easyiq_datetime(start_str)
+            if event_start is None:
+                return None
+            event_end = _parse_easyiq_datetime(end_str) if end_str else event_start
+            if event_end is None:
+                event_end = event_start
             
             # Create CalendarEvent object for weekplan
             summary = event_data.get('courses', 'School Event')
@@ -195,11 +225,10 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
             # If we have a start time, use it; otherwise create an all-day event
             if start_time_str:
                 try:
-                    event_start = datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
-                    event_end = event_start.replace(hour=event_start.hour + 1)  # 1 hour duration
-                    # Make timezone-aware using Home Assistant's timezone utilities
-                    event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
-                    event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
+                    event_start = _parse_easyiq_datetime(start_time_str)
+                    if event_start is None:
+                        raise ValueError("Unsupported EasyIQ date format")
+                    event_end = event_start + timedelta(hours=1)
                 except ValueError:
                     # If parsing fails, create all-day event for today
                     now = dt_util.now()
@@ -331,11 +360,10 @@ class EasyIQHomeworkCalendarEntity(CalendarEntity):
             # If we have a start time, use it; otherwise create an all-day event
             if start_time_str:
                 try:
-                    event_start = datetime.strptime(start_time_str, "%Y/%m/%d %H:%M")
-                    event_end = event_start.replace(hour=event_start.hour + 1)  # 1 hour duration
-                    # Make timezone-aware using Home Assistant's timezone utilities
-                    event_start = dt_util.as_local(event_start.replace(tzinfo=dt_util.UTC))
-                    event_end = dt_util.as_local(event_end.replace(tzinfo=dt_util.UTC))
+                    event_start = _parse_easyiq_datetime(start_time_str)
+                    if event_start is None:
+                        raise ValueError("Unsupported EasyIQ date format")
+                    event_end = event_start + timedelta(hours=1)
                 except ValueError:
                     # If parsing fails, create all-day event for today
                     now = dt_util.now()
@@ -368,7 +396,5 @@ class EasyIQHomeworkCalendarEntity(CalendarEntity):
             )
             
         except Exception as err:
-            _LOGGER.error("Error parsing homework event: %s", err)
-            return None
             _LOGGER.error("Error parsing homework event: %s", err)
             return None
