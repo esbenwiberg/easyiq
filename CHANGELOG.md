@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-06-20
+
+### Fixed
+- Fixed the MitID external auth page returning `401 Unauthorized` immediately after submitting the username
+- Render a small browser-friendly MitID auth status page instead of raw JSON when opened from the Home Assistant config flow
+
 ## [0.5.1] - 2026-06-20
 
 ### Fixed
