@@ -68,6 +68,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     def _handle_token_update(new_token_state: AulaTokenState) -> None:
         runtime_data["token_state"] = new_token_state
+        data = dict(entry.data)
+        data.update(new_token_state.as_entry_data())
+        hass.loop.call_soon_threadsafe(
+            hass.config_entries.async_update_entry,
+            entry,
+            data=data,
+        )
     
     # Create the EasyIQ client
     client = EasyIQClient(

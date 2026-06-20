@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8] - 2026-06-21
+
+### Fixed
+- Refresh expired Aula access tokens through the MitID/OIDC token endpoint instead of the removed Aula API refresh method
+- Persist refreshed Aula token state back to the Home Assistant config entry so rotated refresh tokens survive restart
+
 ## [0.5.7] - 2026-06-20
 
 ### Fixed

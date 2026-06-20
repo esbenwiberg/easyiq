@@ -121,16 +121,22 @@ class TokenRefresher(Protocol):
         """Refresh token state."""
 
 
+AULA_OIDC_TOKEN_URL = "https://login.aula.dk/simplesaml/module.php/oidc/token.php"
+AULA_CLIENT_ID_LEVEL_3 = "_99949a54b8b65423862aac1bf629599ed64231607a"
+
+
 class AulaTokenRefresher:
     """Refresh Aula tokens through a small mockable HTTP boundary."""
 
     def __init__(
         self,
-        refresh_url: str = "https://www.aula.dk/api/v22/?method=auth.refreshToken",
+        refresh_url: str = AULA_OIDC_TOKEN_URL,
+        client_id: str = AULA_CLIENT_ID_LEVEL_3,
         session_factory: Callable[[], Any] | None = None,
     ) -> None:
         """Initialize the refresher."""
         self.refresh_url = refresh_url
+        self.client_id = client_id
         self._session_factory = session_factory
 
     def refresh(self, token_state: AulaTokenState) -> AulaTokenState:
@@ -141,13 +147,29 @@ class AulaTokenRefresher:
         session = self._session_factory() if self._session_factory else requests.Session()
         response = session.post(
             self.refresh_url,
-            json={CONF_REFRESH_TOKEN: token_state.refresh_token},
+            data={
+                "grant_type": "refresh_token",
+                CONF_REFRESH_TOKEN: token_state.refresh_token,
+                "client_id": self.client_id,
+            },
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/140.0.0.0 Safari/537.36"
+                ),
+            },
             timeout=30,
             verify=True,
         )
 
-        if response.status_code in (401, 403):
-            raise MitIDAuthRejected("Aula refresh token was rejected")
+        if response.status_code in (400, 401, 403):
+            raise MitIDAuthRejected(
+                "Aula refresh token was rejected: "
+                f"HTTP {response.status_code} {response.text[:200]}"
+            )
         if response.status_code != 200:
             raise MitIDAuthError(f"Aula token refresh failed: HTTP {response.status_code}")
 
