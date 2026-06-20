@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-06-20
+
+### Fixed
+- Prevent duplicate EasyIQ config entries for the same MitID username
+- Retry calendar event requests with the child user/login ID when EasyIQ rejects the institution-profile ID
+- Include a short Calendar API response preview in normal error logs when EasyIQ returns a non-200 status
+
 ## [0.5.5] - 2026-06-20
 
 ### Fixed

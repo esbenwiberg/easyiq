@@ -131,6 +131,7 @@ class EasyIQClient:
         self.apiurl = ""  # For compatibility with Aula client
         self.widgets = {}
         self.tokens = {}
+        self._calendar_login_id_cache = {}
         
         # Data storage
         self.children = []
@@ -488,24 +489,29 @@ class EasyIQClient:
                 _LOGGER.debug(f"Children data: {self._children_data}")
                 return []
             
-            # Use the child's actual ID as loginId (this was the bug!)
-            actual_child_id = child_data.get("id", child_id)
-            _LOGGER.debug(f"Child {child_id} -> using actual_child_id: {actual_child_id} for API call")
+            # EasyIQ has historically accepted different Aula child identifiers
+            # depending on institution/widget context. Try the known working
+            # institution-profile id first, then fall back to the user/login id.
+            actual_child_id = str(child_data.get("id", child_id))
+            user_child_id = str(child_data.get("userId", child_id))
+            cached_login_id = self._calendar_login_id_cache.get(str(child_id))
+            candidate_login_ids = []
+            if cached_login_id:
+                candidate_login_ids.append(str(cached_login_id))
+            for candidate in (actual_child_id, user_child_id, str(child_id)):
+                if candidate and candidate not in candidate_login_ids:
+                    candidate_login_ids.append(candidate)
+            _LOGGER.debug(
+                "Child %s calendar loginId candidates: %s",
+                child_id,
+                candidate_login_ids,
+            )
             
             # Calculate the target date based on weeks_ahead
             target_date = datetime.datetime.now() + datetime.timedelta(weeks=weeks_ahead)
             
-            params = {
-                "loginId": str(actual_child_id),  # Use actual child ID
-                "date": target_date.isoformat() + "Z",  # Support different weeks
-                "activityFilter": "-1",  # Try with no filter first
-                "courseFilter": "-1",
-                "textFilter": "",
-                "ownWeekPlan": "false"
-            }
-            
             # Headers exactly like Chrome DevTools
-            headers = {
+            base_headers = {
                 "accept": "*/*",
                 "accept-encoding": "gzip, deflate, br, zstd",
                 "accept-language": "en-US,en;q=0.9,da;q=0.8",
@@ -522,29 +528,53 @@ class EasyIQClient:
                 "sec-fetch-site": "same-origin",
                 "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edge/140.0.0.0",
                 "x-requested-with": "XMLHttpRequest",
-                # Custom headers from Chrome DevTools
-                "x-child": child_id,
-                "x-childfilter": child_id,
                 "x-institutionfilter": ",".join(self._institution_profiles) if self._institution_profiles else "",  # Dynamic institution filter
                 "x-login": self.username,
                 "x-userprofile": "guardian",
             }
-            
-            _LOGGER.debug("Calendar events request - URL: %s", url)
-            _LOGGER.debug("Calendar events request - Params: %s", params)
-            
-            # Make the request using the authenticated session
-            response = self._ensure_sync_session().get(
-                url, params=params, headers=headers, verify=True
-            )
-            
-            if response.status_code == 200:
+
+            last_response = None
+            last_params = None
+            for login_id in candidate_login_ids:
+                params = {
+                    "loginId": login_id,
+                    "date": target_date.isoformat() + "Z",  # Support different weeks
+                    "activityFilter": "-1",  # Try with no filter first
+                    "courseFilter": "-1",
+                    "textFilter": "",
+                    "ownWeekPlan": "false",
+                }
+                headers = {
+                    **base_headers,
+                    # Custom headers from Chrome DevTools
+                    "x-child": str(child_id),
+                    "x-childfilter": str(child_id),
+                }
+
+                _LOGGER.debug("Calendar events request - URL: %s", url)
+                _LOGGER.debug("Calendar events request - Params: %s", params)
+
+                # Make the request using the authenticated session
+                response = self._ensure_sync_session().get(
+                    url, params=params, headers=headers, verify=True
+                )
+                last_response = response
+                last_params = params
+
+                if response.status_code != 200:
+                    _LOGGER.debug(
+                        "Calendar events loginId %s returned status %s",
+                        login_id,
+                        response.status_code,
+                    )
+                    continue
+
                 try:
                     # Debug: Log response info
                     _LOGGER.debug(f"Response status: {response.status_code}")
                     _LOGGER.debug(f"Content encoding: {response.headers.get('content-encoding', 'none')}")
                     _LOGGER.debug(f"Content type: {response.headers.get('content-type', 'none')}")
-                    
+
                     # Let requests handle decompression automatically (including Brotli)
                     # This is more reliable than manual decompression
                     try:
@@ -568,15 +598,16 @@ class EasyIQClient:
                                 events = []
                         else:
                             events = []
-                    
+
+                    self._calendar_login_id_cache[str(child_id)] = login_id
                     _LOGGER.info("🎉 Successfully retrieved %d calendar events!", len(events))
-                    
+
                     # Log some sample data for debugging
                     if events and len(events) > 0:
                         sample_event = events[0]
                         _LOGGER.debug(f"Sample event keys: {list(sample_event.keys())}")
                         _LOGGER.debug(f"Sample event: {sample_event}")
-                    
+
                     return events
                 except Exception as e:
                     _LOGGER.error("Failed to parse calendar events JSON: %s", e)
@@ -591,10 +622,18 @@ class EasyIQClient:
                     except Exception as debug_error:
                         _LOGGER.debug(f"Debug info error: {debug_error}")
                     return []
-            else:
-                _LOGGER.error("Calendar events API returned status %s", response.status_code)
-                _LOGGER.debug(f"Error response: {response.text[:200]}...")
-                return []
+
+            if last_response is not None:
+                response_preview = last_response.text[:200].replace("\n", " ")
+                _LOGGER.error(
+                    "Calendar events API returned status %s for week offset %s; "
+                    "response preview: %r",
+                    last_response.status_code,
+                    weeks_ahead,
+                    response_preview,
+                )
+                _LOGGER.debug("Calendar events failed request params: %s", last_params)
+            return []
                 
         except MitIDAuthError:
             raise

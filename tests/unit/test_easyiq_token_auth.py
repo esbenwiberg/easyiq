@@ -28,14 +28,19 @@ client_module = load_module("easyiq_client_token_test", "client.py")
 
 
 class FakeResponse:
-    def __init__(self, payload: dict[str, Any], status_code: int = 200) -> None:
+    def __init__(
+        self,
+        payload: dict[str, Any] | list[dict[str, Any]],
+        status_code: int = 200,
+        text: str = "",
+    ) -> None:
         self._payload = payload
         self.status_code = status_code
         self.headers: dict[str, str] = {}
         self.content = b""
-        self.text = ""
+        self.text = text
 
-    def json(self) -> dict[str, Any]:
+    def json(self) -> dict[str, Any] | list[dict[str, Any]]:
         return self._payload
 
 
@@ -111,6 +116,33 @@ class FakeSession:
             )
 
         return FakeResponse({}, status_code=404)
+
+
+class CalendarFallbackSession(FakeSession):
+    def get(self, url: str, **kwargs: Any) -> FakeResponse:
+        params = dict(kwargs.get("params") or {})
+        if "CalendarGetWeekplanEvents" in url:
+            self.calls.append(
+                {
+                    "url": url,
+                    "params": params,
+                    "headers": kwargs.get("headers"),
+                }
+            )
+            if params.get("loginId") == "200":
+                return FakeResponse({}, status_code=500, text="wrong child identity")
+            if params.get("loginId") == "100":
+                return FakeResponse(
+                    [
+                        {
+                            "itemType": 9,
+                            "start": "2026/06/22 08:00",
+                            "end": "2026/06/22 09:00",
+                            "courses": "Math",
+                        }
+                    ]
+                )
+        return super().get(url, **kwargs)
 
 
 class RecordingRefresher:
@@ -202,6 +234,32 @@ class EasyIQTokenAuthTests(unittest.TestCase):
 
         with self.assertRaises(mitid_auth.MitIDAuthRejected):
             failing_client._authenticate_sync()
+
+    def test_calendar_events_fall_back_to_child_user_id_when_profile_id_fails(self) -> None:
+        fake_session = CalendarFallbackSession()
+        token_state = mitid_auth.AulaTokenState(
+            access_token="access-123",
+            refresh_token="refresh-123",
+            expires_at=time.time() + 3600,
+        )
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            token_state,
+            session_factory=lambda: fake_session,
+        )
+
+        self.assertTrue(client.login())
+
+        events = client._sync_get_calendar_events("100")
+
+        calendar_login_ids = [
+            call["params"]["loginId"]
+            for call in fake_session.calls
+            if "CalendarGetWeekplanEvents" in call["url"]
+        ]
+        self.assertEqual(["200", "100"], calendar_login_ids)
+        self.assertEqual("Math", events[0]["courses"])
+        self.assertEqual("100", client._calendar_login_id_cache["100"])
 
 
 if __name__ == "__main__":

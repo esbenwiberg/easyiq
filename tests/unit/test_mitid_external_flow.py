@@ -43,6 +43,13 @@ def install_dependency_stubs() -> None:
         def __init_subclass__(cls, **_: Any) -> None:
             super().__init_subclass__()
 
+        async def async_set_unique_id(self, unique_id: str) -> None:
+            self._unique_id = unique_id
+
+        def _abort_if_unique_id_configured(self) -> None:
+            if self._unique_id in getattr(self, "_configured_unique_ids", set()):
+                raise AbortFlow("already_configured")
+
         def async_external_step(
             self,
             *,
@@ -126,6 +133,11 @@ def install_dependency_stubs() -> None:
     sys.modules.setdefault("homeassistant.core", core)
 
     data_entry_flow = types.ModuleType("homeassistant.data_entry_flow")
+
+    class AbortFlow(Exception):
+        pass
+
+    data_entry_flow.AbortFlow = AbortFlow
     data_entry_flow.FlowResult = dict
     sys.modules.setdefault("homeassistant.data_entry_flow", data_entry_flow)
 
@@ -158,6 +170,7 @@ def load_integration_module(name: str, filename: str):
 
 config_flow = load_integration_module("config_flow_external_test", "config_flow.py")
 mitid_auth = sys.modules["custom_components.aula_easyiq.mitid_auth"]
+AbortFlow = sys.modules["homeassistant.data_entry_flow"].AbortFlow
 
 
 class FakeHass:
@@ -172,6 +185,26 @@ class FakeConfigEntry:
 
 
 class MitIDExternalFlowTests(unittest.TestCase):
+    def test_user_step_aborts_duplicate_normalized_mitid_username(self) -> None:
+        flow = config_flow.ConfigFlow()
+        flow.hass = FakeHass(mitid_auth.MitIDAuthManager())
+        flow._configured_unique_ids = {"guardian@example.test"}
+
+        with self.assertRaises(AbortFlow):
+            asyncio.run(
+                flow.async_step_user(
+                    {
+                        "mitid_username": " Guardian@Example.Test ",
+                        "schoolschedule": True,
+                        "weekplan": True,
+                        "homework": True,
+                        "presence": True,
+                    }
+                )
+            )
+
+        self.assertEqual("guardian@example.test", flow._unique_id)
+
     def test_options_flow_keeps_constructor_config_entry_privately(self) -> None:
         handler = config_flow.OptionsFlowHandler(FakeConfigEntry())
 

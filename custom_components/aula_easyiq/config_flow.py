@@ -71,6 +71,11 @@ def _feature_data(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalized_mitid_username(data: dict[str, Any]) -> str:
+    """Return a normalized MitID username for config entry de-duplication."""
+    return str(data.get(CONF_MITID_USERNAME, "")).strip().lower()
+
+
 def entry_data_from_auth(
     user_input: dict[str, Any],
     session: MitIDAuthSession,
@@ -130,8 +135,12 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
 
-        errors: dict[str, str] = {}
+        username_unique_id = _normalized_mitid_username(user_input)
+        if self._reauth_entry is None and username_unique_id:
+            await self.async_set_unique_id(username_unique_id)
+            self._abort_if_unique_id_configured()
 
+        errors: dict[str, str] = {}
         try:
             await self._async_register_auth_views()
             info = await validate_input(
