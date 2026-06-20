@@ -13,9 +13,8 @@ def load_env_file():
     """Load environment variables from .env file."""
     env_file = Path(".env")
     if not env_file.exists():
-        print("❌ Error: .env file not found!")
-        print("📝 Copy .env.template to .env and fill in your credentials")
-        return False
+        print("ℹ️  .env file not found; continuing with defaults")
+        return True
     
     print("📂 Loading environment variables from .env...")
     
@@ -28,20 +27,6 @@ def load_env_file():
                     os.environ[key.strip()] = value.strip()
                     print(f"   ✅ Set {key.strip()}")
     
-    return True
-
-def check_credentials():
-    """Check if required credentials are set."""
-    username = os.getenv("EASYIQ_USERNAME")
-    password = os.getenv("EASYIQ_PASSWORD")
-    
-    if not username or not password:
-        print("❌ Error: EASYIQ_USERNAME and EASYIQ_PASSWORD must be set in .env file")
-        print("📝 Copy .env.template to .env and fill in your credentials")
-        return False
-    
-    print(f"🔐 Username: {username}")
-    print(f"🔐 Password: {'*' * len(password)}")
     return True
 
 def setup_environment():
@@ -171,11 +156,6 @@ def main():
     
     # Load environment variables
     if not load_env_file():
-        input("Press Enter to exit...")
-        return 1
-    
-    # Check credentials
-    if not check_credentials():
         input("Press Enter to exit...")
         return 1
     

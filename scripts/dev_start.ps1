@@ -17,21 +17,7 @@ if (Test-Path ".env") {
         }
     }
 } else {
-    Write-Host "Error: .env file not found!" -ForegroundColor Red
-    Write-Host "Copy .env.template to .env and fill in your credentials" -ForegroundColor Yellow
-    Read-Host "Press Enter to exit"
-    exit 1
-}
-
-# Check if credentials are set
-$username = [Environment]::GetEnvironmentVariable("EASYIQ_USERNAME", "Process")
-$password = [Environment]::GetEnvironmentVariable("EASYIQ_PASSWORD", "Process")
-
-if (-not $username -or -not $password) {
-    Write-Host "Error: EASYIQ_USERNAME and EASYIQ_PASSWORD must be set in .env file" -ForegroundColor Red
-    Write-Host "Copy .env.template to .env and fill in your credentials" -ForegroundColor Yellow
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host ".env file not found; continuing with defaults" -ForegroundColor Yellow
 }
 
 # Set default values if not set

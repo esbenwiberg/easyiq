@@ -8,10 +8,18 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.loader import async_get_integration
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
-from .const import DOMAIN, STARTUP
-from .client import EasyIQClient
+from .const import (
+    CONF_MITID_USERNAME,
+    CONF_PASSWORD,
+    CONF_REAUTH_REQUIRED,
+    DOMAIN,
+    STARTUP,
+)
+from .client import EasyIQAuthError, EasyIQClient
+from .migration import migrate_legacy_password_entry_data
+from .mitid_auth import AulaTokenRefresher, AulaTokenState, MitIDAuthError
 from .sensor import EasyIQDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,11 +37,37 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     _LOGGER.info(STARTUP, integration.version)
     
     hass.data.setdefault(DOMAIN, {})
+
+    try:
+        from .views import async_register_auth_views
+
+        await async_register_auth_views(hass)
+    except Exception as err:  # pylint: disable=broad-except
+        _LOGGER.debug("Could not register MitID auth views during setup: %s", err)
+
+    if entry.data.get(CONF_REAUTH_REQUIRED) or CONF_PASSWORD in entry.data:
+        raise ConfigEntryAuthFailed("EasyIQ requires MitID reauthentication")
+
+    mitid_username = entry.data.get(CONF_MITID_USERNAME)
+    if not mitid_username:
+        raise ConfigEntryAuthFailed("EasyIQ MitID username is missing")
+
+    try:
+        token_state = AulaTokenState.from_entry_data(entry.data)
+    except MitIDAuthError as err:
+        raise ConfigEntryAuthFailed("EasyIQ Aula token state is missing") from err
+
+    runtime_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
+
+    def _handle_token_update(new_token_state: AulaTokenState) -> None:
+        runtime_data["token_state"] = new_token_state
     
     # Create the EasyIQ client
     client = EasyIQClient(
-        username=entry.data["username"],
-        password=entry.data["password"],
+        mitid_username=mitid_username,
+        token_state=token_state,
+        token_refresher=AulaTokenRefresher(),
+        on_token_update=_handle_token_update,
     )
     
     # Create the data update coordinator
@@ -42,6 +76,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Perform initial data fetch
     try:
         await coordinator.async_config_entry_first_refresh()
+    except (EasyIQAuthError, MitIDAuthError) as err:
+        _LOGGER.error("EasyIQ authentication failed during setup: %s", err)
+        raise ConfigEntryAuthFailed from err
     except Exception as err:
         _LOGGER.error("Failed to perform initial data fetch: %s", err)
         raise ConfigEntryNotReady from err
@@ -56,11 +93,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_options_update_listener = entry.add_update_listener(options_update_listener)
     # Store a reference to the unsubscribe function to cleanup if an entry is unloaded.
     hass_data["unsub_options_update_listener"] = unsub_options_update_listener
-    hass.data[DOMAIN][entry.entry_id] = hass_data
+    runtime_data.update(hass_data)
 
     # Forward the setup to the sensor, binary_sensor, and calendar platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate legacy credential entries to a MitID reauth-required state."""
+    if entry.version >= 2:
+        return True
+
+    data = migrate_legacy_password_entry_data(dict(entry.data))
+
+    hass.config_entries.async_update_entry(entry, data=data, version=2)
+    _LOGGER.info("Migrated EasyIQ entry %s to MitID reauthentication", entry.entry_id)
     return True
 
 

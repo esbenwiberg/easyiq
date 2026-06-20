@@ -6,7 +6,7 @@ This guide explains how to set up a complete development environment for the Eas
 
 - Python 3.11 or higher
 - Git
-- Your Aula credentials (username/password)
+- A guardian MitID account for optional live smoke testing
 
 ## Step 1: Install Home Assistant with Docker
 
@@ -51,11 +51,9 @@ docker run -d --name homeassistant --restart=unless-stopped -e TZ=Europe/Copenha
 git clone https://github.com/your-username/easyiq.git
 cd easyiq
 
-# Set up credentials
+# Optional live smoke setup
 cp .env.template .env
-# Edit .env file with your Aula credentials:
-# EASYIQ_USERNAME=your_aula_username
-# EASYIQ_PASSWORD=your_aula_password
+# Edit .env only when you have fresh Aula token state from a MitID flow
 ```
 
 ## Step 3: Automated Setup (Recommended)
@@ -106,7 +104,7 @@ docker run -d --name homeassistant --restart=unless-stopped -e TZ=Europe/Copenha
    - Go to Settings → Devices & Services
    - Click "Add Integration"
    - Search for "EasyIQ" (it should now appear!)
-   - Enter your Aula credentials
+   - Enter your guardian MitID username and complete the MitID authorization step
 
 ### If Integration Doesn't Appear
 If you don't see "EasyIQ" in the integration list:
@@ -127,13 +125,9 @@ If you don't see "EasyIQ" in the integration list:
    docker logs homeassistant
    ```
 
-4. **Manual configuration** (if UI doesn't work):
-   Add to your `ha-config/configuration.yaml`:
-   ```yaml
-   aula_easyiq:
-     username: your_aula_username
-     password: your_aula_password
-   ```
+4. **Manual configuration**:
+   Manual YAML setup is not supported because the integration needs the config
+   flow to complete MitID authentication and store Aula token state.
 
 ## Step 5: Development Workflow
 
@@ -142,7 +136,7 @@ If you don't see "EasyIQ" in the integration list:
 # Run offline validation
 ./scripts/validate.sh
 
-# Test the live client directly, with credentials in .env
+# Test the live client directly with MitID token state in .env
 python scripts/test_client.py
 
 # Interactive debugging
@@ -161,7 +155,7 @@ python scripts/debug_helper.py
 The development scripts automatically:
 - Create a temporary Home Assistant configuration
 - Copy the EasyIQ integration to the right location
-- Load your credentials from `.env`
+- Load optional MitID token state from `.env`
 - Start Home Assistant on `http://localhost:8123`
 - Enable debug logging for the EasyIQ integration
 
@@ -233,7 +227,7 @@ docker run -d --name homeassistant -p 8124:8123 homeassistant/home-assistant:lat
    ```
 
 ### API Authentication Issues
-1. **Verify your credentials** in `.env` file
+1. **Complete MitID reauthentication** from the EasyIQ integration entry
 2. **Test with the client script**:
    ```bash
    python scripts/test_client.py

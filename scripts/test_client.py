@@ -1,184 +1,125 @@
 #!/usr/bin/env python3
 """
-Test the EasyIQ client implementation with working CalendarGetWeekplanEvents endpoint.
+Opt-in live smoke test for the EasyIQ client.
+
+This script expects Aula token state obtained from a completed guardian MitID
+flow. It never asks for or uses old form authentication.
 """
 
-import os
-import sys
+from __future__ import annotations
+
 import asyncio
 import logging
+import os
+from pathlib import Path
+import sys
 
-# Set up proper encoding for Windows console
+
 if sys.platform == "win32":
     import codecs
+
     sys.stdout = codecs.getwriter("utf-8")(sys.stdout.detach())
     sys.stderr = codecs.getwriter("utf-8")(sys.stderr.detach())
 
-# Set up logging
+
 logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
-def load_credentials():
-    """Load credentials from .env file."""
-    env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), '.env')
-    if os.path.exists(env_path):
-        with open(env_path, 'r') as f:
-            for line in f:
-                if line.strip() and not line.startswith('#'):
-                    key, value = line.strip().split('=', 1)
-                    os.environ[key] = value.strip('"\'')
-    
-    username = os.getenv('EASYIQ_USERNAME')
-    password = os.getenv('EASYIQ_PASSWORD')
-    
-    if not password:
-        print("❌ EASYIQ_PASSWORD not found in environment")
+
+def load_env_file() -> None:
+    """Load environment variables from .env."""
+    env_path = Path(__file__).resolve().parents[1] / ".env"
+    if not env_path.exists():
+        return
+
+    for line in env_path.read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            key, value = line.strip().split("=", 1)
+            os.environ[key] = value.strip("\"'")
+
+
+def load_token_state() -> tuple[str, dict[str, object]]:
+    """Load MitID username and Aula token state from the environment."""
+    load_env_file()
+
+    username = os.getenv("EASYIQ_MITID_USERNAME")
+    access_token = os.getenv("EASYIQ_ACCESS_TOKEN")
+    refresh_token = os.getenv("EASYIQ_REFRESH_TOKEN")
+    expires_at = os.getenv("EASYIQ_TOKEN_EXPIRES_AT")
+
+    missing = [
+        name
+        for name, value in {
+            "EASYIQ_MITID_USERNAME": username,
+            "EASYIQ_ACCESS_TOKEN": access_token,
+            "EASYIQ_REFRESH_TOKEN": refresh_token,
+            "EASYIQ_TOKEN_EXPIRES_AT": expires_at,
+        }.items()
+        if not value
+    ]
+    if missing:
+        print(f"Missing live smoke environment fields: {', '.join(missing)}")
         sys.exit(1)
-    
-    return username, password
 
-async def main():
-    """Test the EasyIQ client implementation."""
-    print("🔬 Testing EasyIQ Client Implementation")
+    return username, {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_expires_at": float(expires_at),
+    }
+
+
+async def main() -> None:
+    """Run a live EasyIQ client smoke test."""
+    print("Testing EasyIQ client with MitID token state")
     print("=" * 60)
-    
-    # Import our client
-    sys.path.append('custom_components/aula_easyiq')
+
+    sys.path.append("custom_components/aula_easyiq")
     from client import EasyIQClient
-    
-    username, password = load_credentials()
-    
-    # Create and authenticate client
-    client = EasyIQClient(username, password)
-    
-    print(f"Testing with username: {username}")
-    
+
+    username, token_state = load_token_state()
+    client = EasyIQClient(username, token_state)
+
+    print(f"Testing with MitID username: {username}")
+
     try:
         if not client.login():
-            print("❌ Authentication failed")
+            print("Authentication failed")
             return
-        
-        print("✅ Authentication successful!")
-        
-        # Load widgets after authentication
+
+        print("Authentication successful")
         client.get_widgets()
         print(f"Available widgets: {client.widgets}")
-        
-        # Get children
-        children = await client.get_children()
-        print(f"Found {len(children)} children: {[c['name'] for c in children]}")
-        
-        if not children:
-            print("❌ No children found")
-            return
-        
-        # Test both weekplan and homework for first child
-        child = children[0]
-        child_id = child['id']
-        child_name = child['name']
-        
-        print(f"\n--- Testing data for {child_name} (ID: {child_id}) ---")
-        
-        # Test weekplan
-        print("\n📅 Testing weekplan...")
-        weekplan_data = await client.get_weekplan(child_id)
-        
-        if weekplan_data:
-            print("✅ Weekplan data retrieved!")
-            print(f"Week: {weekplan_data.get('week', 'Unknown')}")
-            print(f"Events: {len(weekplan_data.get('events', []))}")
-            
-            # Show first few events
-            events = weekplan_data.get('events', [])
-            for i, event in enumerate(events[:3]):
-                print(f"  Event {i+1}: {event.get('courses', 'Unknown')} - {event.get('start', 'Unknown time')}")
-            
-            if len(events) > 3:
-                print(f"  ... and {len(events) - 3} more events")
-        else:
-            print("❌ No weekplan data retrieved")
-        
-        # Test homework
-        print("\n📚 Testing homework...")
-        homework_data = await client.get_homework(child_id)
-        
-        if homework_data:
-            print("✅ Homework data retrieved!")
-            print(f"Week: {homework_data.get('week', 'Unknown')}")
-            print(f"Assignments: {len(homework_data.get('assignments', []))}")
-            
-            # Show assignments
-            assignments = homework_data.get('assignments', [])
-            for i, assignment in enumerate(assignments[:3]):
-                print(f"  Assignment {i+1}: {assignment.get('subject', 'Unknown')} - {assignment.get('start_time', 'Unknown time')}")
-                if assignment.get('description'):
-                    desc = assignment['description'][:100] + "..." if len(assignment['description']) > 100 else assignment['description']
-                    print(f"    Description: {desc}")
-            
-            if len(assignments) > 3:
-                print(f"  ... and {len(assignments) - 3} more assignments")
-        else:
-            print("❌ No homework data retrieved")
-        
-        # Test presence
-        print(f"\n👤 Testing presence...")
-        presence_data = await client.get_presence(child_id)
-        
-        if presence_data:
-            print("✅ Presence data retrieved!")
-            print(f"Status: {presence_data.get('status', 'Unknown')} (Code: {presence_data.get('status_code', 'Unknown')})")
-            
-            # Show detailed presence information
-            if presence_data.get('check_in_time'):
-                print(f"  ✅ Arrived: {presence_data.get('check_in_time')}")
-            else:
-                print(f"  ⏳ Not arrived yet")
-                
-            if presence_data.get('check_out_time'):
-                print(f"  🚪 Left: {presence_data.get('check_out_time')}")
-            else:
-                print(f"  🏫 Still at school")
-                
-            if presence_data.get('entry_time'):
-                print(f"  📅 Planned arrival: {presence_data.get('entry_time')}")
-                
-            if presence_data.get('exit_time'):
-                print(f"  📅 Planned departure: {presence_data.get('exit_time')}")
-                
-            if presence_data.get('comment'):
-                print(f"  📝 Note: {presence_data.get('comment')}")
-                
-            if presence_data.get('exit_with'):
-                print(f"  👥 Picked up by: {presence_data.get('exit_with')}")
-                
-            print(f"  🕐 Last updated: {presence_data.get('last_updated', 'Unknown')}")
-        else:
-            print("❌ No presence data retrieved")
-        
-        # Test messages
-        print(f"\n👤 Testing messages...")
-        messages_data = await client.get_messages()
-        if messages_data:
-            print("✅ Messages data retrieved!")
-            print("Messages data found")
-        else:
-            print("❌ No messages data retrieved")
 
-        print(f"\n🎉 Testing complete!")
-        print(f"Summary:")
-        print(f"- Authentication: ✅ Working")
-        print(f"- Widgets: ✅ {len(client.widgets)} found")
-        print(f"- Children: ✅ {len(children)} found")
-        print(f"- Weekplan: {'✅ Working' if weekplan_data else '❌ Failed'}")
-        print(f"- Homework: {'✅ Working' if homework_data else '❌ Failed'}")
-        print(f"- Presence: {'✅ Working' if presence_data else '❌ Failed'}")
-        print(f"- Messages: {'✅ Working' if messages_data else '❌ Failed'}")
-        
+        children = await client.get_children()
+        print(f"Found {len(children)} children: {[child['name'] for child in children]}")
+
+        if not children:
+            print("No children found")
+            return
+
+        child = children[0]
+        child_id = child["id"]
+        child_name = child["name"]
+
+        print(f"\n--- Testing data for {child_name} (ID: {child_id}) ---")
+
+        weekplan_data = await client.get_weekplan(child_id)
+        print(f"Weekplan events: {len(weekplan_data.get('events', []))}")
+
+        homework_data = await client.get_homework(child_id)
+        print(f"Homework assignments: {len(homework_data.get('assignments', []))}")
+
+        presence_data = await client.get_presence(child_id)
+        print(
+            "Presence: "
+            f"{presence_data.get('status', 'Unknown')} "
+            f"(code {presence_data.get('status_code', 'Unknown')})"
+        )
+
+        messages_data = await client.get_messages()
+        print(f"Messages data available: {bool(messages_data)}")
     finally:
-        # Ensure session is properly closed
         await client.close()
-        
-    print("\n✅ Client test passed!")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

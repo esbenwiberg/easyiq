@@ -7,8 +7,8 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .client import EasyIQClient
+from .client import EasyIQAuthError, EasyIQClient
 from .const import (
     CONF_WEEKPLAN,
     CONF_WEEKPLAN_INTERVAL,
@@ -33,6 +33,7 @@ from .const import (
     DEFAULT_HOMEWORK_DAYS,
     DOMAIN,
 )
+from .mitid_auth import MitIDAuthError
 from .update_policy import should_update_data_type
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,6 +205,9 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
             }
             _LOGGER.debug(f"Coordinator updated data successfully: {len(data['children'])} children")
             return data
+        except (EasyIQAuthError, MitIDAuthError) as err:
+            _LOGGER.error("Authentication failed while updating EasyIQ data: %s", err)
+            raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.error(f"Error updating coordinator data: {err}", exc_info=True)
             # Return partial data to keep integration running instead of failing completely
@@ -334,5 +338,4 @@ class EasyIQStatusSensor(CoordinatorEntity, SensorEntity):
             "last_update_success": self.coordinator.last_update_success,
             "last_exception": str(self.coordinator.last_exception) if self.coordinator.last_exception else None,
         }
-
 

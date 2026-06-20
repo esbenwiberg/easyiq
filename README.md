@@ -43,7 +43,7 @@ A Home Assistant custom integration for Aula + EasyIQ school management system, 
 ### For End Users
 1. Install via HACS (see Installation section below)
 2. Add integration through Home Assistant UI
-3. Enter your Aula credentials
+3. Complete guardian MitID authentication for Aula
 
 ### For Developers
 Want to contribute or test locally? See **[DEVELOPMENT_SETUP.md](DEVELOPMENT_SETUP.md)** for complete instructions on:
@@ -59,10 +59,9 @@ Want to contribute or test locally? See **[DEVELOPMENT_SETUP.md](DEVELOPMENT_SET
 1. Go to **Settings** → **Devices & Services**
 2. Click **Add Integration**
 3. Search for "EasyIQ"
-4. Enter your Aula credentials:
-   - **Username**: Your Aula username
-   - **Password**: Your Aula password
-5. Select which features to enable:
+4. Enter the guardian MitID username you use for Aula
+5. Complete the MitID authorization step in the browser window Home Assistant opens
+6. Select which features to enable:
    - School Schedule
    - Weekly Plan (Weekplan)
    - Homework (Lektier)
@@ -106,17 +105,9 @@ This approach reduces API load while keeping important data fresh. The defaults 
 
 ### Manual Configuration (YAML)
 
-Add to your `configuration.yaml`:
-
-```yaml
-aula_easyiq:
-  username: your_aula_username
-  password: your_aula_password
-  school_schedule: true
-  weekplan: true
-  homework: true
-  presence: true
-```
+Manual YAML setup is not supported because EasyIQ now needs the Home Assistant
+config flow to complete guardian MitID authentication and store Aula token state.
+Use the UI setup above.
 
 ## Entities Created
 
@@ -411,7 +402,7 @@ sensor:
 ### Common Issues
 
 **Authentication Failed**
-- Verify your Aula username and password are correct
+- Complete MitID reauthentication from the EasyIQ integration entry
 - Check if your account has access to EasyIQ features
 - Ensure your institution uses EasyIQ (not all Danish schools do)
 
@@ -438,7 +429,7 @@ logger:
 
 ### Test Script
 
-Run the included test script to verify your credentials:
+Run the included test script with Aula token state from a manual MitID smoke test:
 
 ```bash
 cd /config/custom_components/aula_easyiq
@@ -463,9 +454,9 @@ This integration uses **two different API systems** depending on the data type:
   - Comments and pickup information
 - **Messages Data**: Uses Aula messaging endpoints for unread message counts and content
 - Accessed through `https://www.aula.dk/api/v{version}` endpoints
-- Uses direct Aula session authentication
+- Uses Aula access tokens obtained through guardian MitID authentication
 
-The integration authenticates using your Aula credentials and automatically handles both API systems seamlessly.
+The integration authenticates through guardian MitID, stores Aula token state, and automatically handles both API systems seamlessly.
 
 ### API Query Frequency
 
@@ -538,7 +529,7 @@ cd easyiq
 # Run the offline validation contract
 ./scripts/validate.sh
 
-# Opt-in live API smoke; requires credentials in .env
+# Opt-in live API smoke; requires MitID token state in .env
 .venv/bin/python scripts/test_client.py
 
 # Run with debug logging

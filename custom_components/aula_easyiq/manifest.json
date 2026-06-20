@@ -3,6 +3,7 @@
   "name": "Aula-EasyIQ",
   "codeowners": ["@esbenwiberg"],
   "config_flow": true,
+  "after_dependencies": ["http"],
   "dependencies": [],
   "dhcp": [],
   "documentation": "https://github.com/esbenwiberg/easyiq",
