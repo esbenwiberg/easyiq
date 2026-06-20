@@ -48,8 +48,8 @@ docker run -d --name homeassistant --restart=unless-stopped -e TZ=Europe/Copenha
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/easyiq-ha.git
-cd easyiq-ha
+git clone https://github.com/your-username/easyiq.git
+cd easyiq
 
 # Set up credentials
 cp .env.template .env
@@ -87,10 +87,10 @@ mkdir ha-config/custom_components
 
 # Copy the EasyIQ integration
 # Windows PowerShell:
-cp -r custom_components\easyiq ha-config\custom_components\
+cp -r custom_components\aula_easyiq ha-config\custom_components\
 
 # Linux/Mac:
-cp -r custom_components/easyiq ha-config/custom_components/
+cp -r custom_components/aula_easyiq ha-config/custom_components/
 
 # Pull and start Home Assistant
 docker pull homeassistant/home-assistant:latest
@@ -114,7 +114,7 @@ If you don't see "EasyIQ" in the integration list:
 1. **Check the integration is installed**:
    ```bash
    # Verify files are in the right place
-   docker exec homeassistant ls -la /config/custom_components/easyiq/
+   docker exec homeassistant ls -la /config/custom_components/aula_easyiq/
    ```
 
 2. **Restart Home Assistant**:
@@ -130,7 +130,7 @@ If you don't see "EasyIQ" in the integration list:
 4. **Manual configuration** (if UI doesn't work):
    Add to your `ha-config/configuration.yaml`:
    ```yaml
-   easyiq:
+   aula_easyiq:
      username: your_aula_username
      password: your_aula_password
    ```
@@ -139,18 +139,21 @@ If you don't see "EasyIQ" in the integration list:
 
 ### Testing the Integration
 ```bash
-# Test the client directly
+# Run offline validation
+./scripts/validate.sh
+
+# Test the live client directly, with credentials in .env
 python scripts/test_client.py
 
 # Interactive debugging
 python scripts/debug_helper.py
 
 # Validate Home Assistant compatibility
-python scripts/validate_ha_integration.py
+./scripts/validate.sh
 ```
 
 ### Making Changes
-1. Edit files in `custom_components/easyiq/`
+1. Edit files in `custom_components/aula_easyiq/`
 2. Restart Home Assistant (Ctrl+C, then run dev_start script again)
 3. Test changes in the web interface at `http://localhost:8123`
 
@@ -194,12 +197,12 @@ docker run -d --name homeassistant -p 8124:8123 homeassistant/home-assistant:lat
 #### Integration not appearing in UI
 1. **Verify integration is installed**:
    ```bash
-   docker exec homeassistant ls -la /config/custom_components/easyiq/
+   docker exec homeassistant ls -la /config/custom_components/aula_easyiq/
    ```
 
 2. **Check manifest.json is valid**:
    ```bash
-   docker exec homeassistant cat /config/custom_components/easyiq/manifest.json
+   docker exec homeassistant cat /config/custom_components/aula_easyiq/manifest.json
    ```
 
 3. **Restart Home Assistant**:
@@ -221,7 +224,7 @@ docker run -d --name homeassistant -p 8124:8123 homeassistant/home-assistant:lat
 2. **Verify file permissions**:
    ```bash
    # Make sure files are readable
-   chmod -R 755 custom_components/easyiq/
+   chmod -R 755 custom_components/aula_easyiq/
    ```
 
 3. **Test the client directly**:
@@ -257,12 +260,12 @@ python scripts/test_client.py
 python scripts/debug_helper.py
 
 # Validate integration structure
-python scripts/validate_ha_integration.py
+./scripts/validate.sh
 ```
 
 ### Production Testing
 Before releasing, test the integration as users would:
-1. Copy `custom_components/easyiq/` to a real Home Assistant installation
+1. Copy `custom_components/aula_easyiq/` to a real Home Assistant installation
 2. Add the integration through the UI
 3. Verify all sensors and calendar entities work correctly
 

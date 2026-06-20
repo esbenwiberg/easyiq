@@ -13,7 +13,7 @@ EasyIQ integration, version: %s
 This is a custom integration for EasyIQ
 Based on the Aula component with fixes for EasyIQ integration issues
 If you have any issues with this you need to open an issue here:
-https://github.com/easyiq/easyiq-ha/issues
+https://github.com/esbenwiberg/easyiq/issues
 -------------------------------------------------------------------
 """
 

@@ -33,6 +33,7 @@ from .const import (
     DEFAULT_HOMEWORK_DAYS,
     DOMAIN,
 )
+from .update_policy import should_update_data_type
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,19 +126,24 @@ class EasyIQDataUpdateCoordinator(DataUpdateCoordinator):
     def _should_update_data_type(self, data_type: str) -> bool:
         """Check if a specific data type should be updated based on its interval."""
         try:
+            should_update = should_update_data_type(
+                data_type,
+                self.update_intervals,
+                self.last_updates,
+            )
+
             if data_type not in self.update_intervals:
                 _LOGGER.debug(f"Data type {data_type} not in update_intervals, updating by default")
-                return True
+                return should_update
                 
             last_update = self.last_updates.get(data_type)
             if last_update is None:
                 _LOGGER.debug(f"No last update time for {data_type}, updating")
-                return True
+                return should_update
                 
             interval = self.update_intervals[data_type]
             time_since_update = (datetime.now() - last_update).total_seconds()
             
-            should_update = time_since_update >= interval
             if should_update:
                 _LOGGER.debug(f"Should update {data_type}: {time_since_update:.1f}s >= {interval}s")
             else:
@@ -328,6 +334,5 @@ class EasyIQStatusSensor(CoordinatorEntity, SensorEntity):
             "last_update_success": self.coordinator.last_update_success,
             "last_exception": str(self.coordinator.last_exception) if self.coordinator.last_exception else None,
         }
-
 
 

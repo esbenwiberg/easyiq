@@ -35,7 +35,7 @@ A Home Assistant custom integration for Aula + EasyIQ school management system, 
 ### Manual Installation
 
 1. Download the latest release from the [releases page](https://github.com/esbenwiberg/easyiq/releases)
-2. Extract the `custom_components/easyiq` folder to your Home Assistant `custom_components` directory
+2. Extract the `custom_components/aula_easyiq` folder to your Home Assistant `custom_components` directory
 3. Restart Home Assistant
 
 ## Quick Start
@@ -109,7 +109,7 @@ This approach reduces API load while keeping important data fresh. The defaults 
 Add to your `configuration.yaml`:
 
 ```yaml
-easyiq:
+aula_easyiq:
   username: your_aula_username
   password: your_aula_password
   school_schedule: true
@@ -422,7 +422,7 @@ sensor:
 
 **Integration Not Loading**
 - Restart Home Assistant after installation
-- Check `custom_components/easyiq` folder structure is correct
+- Check `custom_components/aula_easyiq` folder structure is correct
 - Review Home Assistant logs for import errors
 
 ### Debug Logging
@@ -433,7 +433,7 @@ Add to your `configuration.yaml` for detailed logs:
 logger:
   default: warning
   logs:
-    custom_components.easyiq: debug
+    custom_components.aula_easyiq: debug
 ```
 
 ### Test Script
@@ -441,7 +441,7 @@ logger:
 Run the included test script to verify your credentials:
 
 ```bash
-cd /config/custom_components/easyiq
+cd /config/custom_components/aula_easyiq
 python scripts/test_client.py
 ```
 
@@ -528,18 +528,21 @@ Contributions are welcome! Please:
 
 ```bash
 git clone https://github.com/esbenwiberg/easyiq.git
-cd easyiq-ha
-pip install -r requirements-dev.txt
+cd easyiq
+./scripts/bootstrap-dev.sh
 ```
 
 ### Testing
 
 ```bash
-# Test the client
-python scripts/test_client.py
+# Run the offline validation contract
+./scripts/validate.sh
+
+# Opt-in live API smoke; requires credentials in .env
+.venv/bin/python scripts/test_client.py
 
 # Run with debug logging
-python -c "import logging; logging.basicConfig(level=logging.DEBUG); exec(open('scripts/test_client.py').read())"
+.venv/bin/python -c "import logging; logging.basicConfig(level=logging.DEBUG); exec(open('scripts/test_client.py').read())"
 ```
 
 ## License

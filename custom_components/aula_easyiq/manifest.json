@@ -10,7 +10,13 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/esbenwiberg/easyiq/issues",
-  "requirements": ["aiohttp>=3.8.0"],
+  "requirements": [
+    "aiohttp>=3.8.0",
+    "beautifulsoup4>=4.11.0",
+    "lxml>=4.9.0",
+    "pytz>=2023.3",
+    "requests>=2.28.0"
+  ],
   "ssdp": [],
   "version": "0.4.0",
   "zeroconf": []

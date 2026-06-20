@@ -45,7 +45,7 @@ script: !include scripts.yaml
 logger:
   default: info
   logs:
-    custom_components.easyiq: debug
+    custom_components.aula_easyiq: debug
     homeassistant.components.sensor: debug
     homeassistant.helpers.entity_platform: debug
 
