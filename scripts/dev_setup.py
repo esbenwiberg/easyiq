@@ -10,6 +10,17 @@ import subprocess
 import json
 from pathlib import Path
 
+def write_text_if_missing(path: Path, content: str, executable: bool = False) -> None:
+    """Write generated setup files without overwriting committed scripts."""
+    if path.exists():
+        print(f"{path} already exists; leaving it unchanged")
+        return
+
+    path.write_text(content)
+    if executable and os.name != 'nt':
+        os.chmod(path, 0o755)
+    print(f"Created {path}")
+
 def create_env_file():
     """Create a .env file template for development."""
     env_content = """# EasyIQ Development Environment Variables
@@ -31,10 +42,7 @@ EASYIQ_MOCK_MODE=false
 """
     
     env_file = Path(".env.template")
-    with open(env_file, "w") as f:
-        f.write(env_content)
-    
-    print(f"Created {env_file}")
+    write_text_if_missing(env_file, env_content)
     print("Copy this to .env and fill in your credentials")
 
 def create_dev_script():
@@ -73,14 +81,7 @@ python -m homeassistant --config "$HASS_CONFIG_DIR" --debug
 """
     
     script_file = Path("scripts/dev_start.sh")
-    with open(script_file, "w") as f:
-        f.write(script_content)
-    
-    # Make script executable on Unix systems
-    if os.name != 'nt':
-        os.chmod(script_file, 0o755)
-    
-    print(f"Created {script_file}")
+    write_text_if_missing(script_file, script_content, executable=True)
 
 def create_test_script():
     """Create a test script for the EasyIQ client."""
@@ -95,10 +96,10 @@ import sys
 import asyncio
 from pathlib import Path
 
-# Add the custom_components directory to the path
-sys.path.insert(0, str(Path(__file__).parent.parent / "custom_components"))
+# Add the integration directory to the path for standalone client tests
+sys.path.insert(0, str(Path(__file__).parent.parent / "custom_components" / "aula_easyiq"))
 
-from easyiq.client import EasyIQClient
+from client import EasyIQClient
 
 async def test_easyiq_client():
     \"\"\"Test the EasyIQ client with environment variables.\"\"\"
@@ -139,8 +140,8 @@ async def test_easyiq_client():
                 child_id = child.get("id")
                 child_name = child.get("name", "Unknown")
                 print(f"Getting ugeplan for {child_name} (ID: {child_id})...")
-                ugeplan = await client.get_ugeplan(child_id)
-                print(f"Ugeplan data: {ugeplan}")
+                weekplan = await client.get_weekplan(child_id)
+                print(f"Weekplan data: {weekplan}")
         
         return auth_result
         
@@ -172,21 +173,14 @@ if __name__ == "__main__":
 """
     
     script_file = Path("scripts/test_client.py")
-    with open(script_file, "w") as f:
-        f.write(test_content)
-    
-    # Make script executable on Unix systems
-    if os.name != 'nt':
-        os.chmod(script_file, 0o755)
-    
-    print(f"Created {script_file}")
+    write_text_if_missing(script_file, test_content, executable=True)
 
 def create_requirements():
     """Create requirements file for development."""
     requirements_content = """# EasyIQ Development Requirements
 
 # Home Assistant
-homeassistant>=2023.1.0
+homeassistant>=2024.1.0
 
 # Required for EasyIQ integration
 requests>=2.28.0
@@ -200,17 +194,12 @@ pytest-asyncio>=0.20.0
 pytest-homeassistant-custom-component>=0.13.0
 
 # Code quality
-black>=22.0.0
-isort>=5.10.0
-flake8>=5.0.0
-mypy>=0.991
+ruff>=0.8.0
+mypy>=1.13.0
 """
     
     req_file = Path("requirements-dev.txt")
-    with open(req_file, "w") as f:
-        f.write(requirements_content)
-    
-    print(f"Created {req_file}")
+    write_text_if_missing(req_file, requirements_content)
 
 def main():
     """Main setup function."""
@@ -229,9 +218,10 @@ def main():
     print("\nDevelopment setup complete!")
     print("\nNext steps:")
     print("1. Copy .env.template to .env and fill in your credentials")
-    print("2. Install requirements: pip install -r requirements-dev.txt")
+    print("2. Install requirements: ./scripts/bootstrap-dev.sh")
     print("3. Run development server: ./scripts/dev_start.sh")
-    print("4. Test client independently: python scripts/test_client.py")
+    print("4. Validate the repo: ./scripts/validate.sh")
+    print("5. Test the live client independently: python scripts/test_client.py")
 
 if __name__ == "__main__":
     main()

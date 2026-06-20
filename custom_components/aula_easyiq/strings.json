@@ -1,4 +1,30 @@
 {
+  "services": {
+    "api_call": {
+      "name": "API Call",
+      "description": "Make a custom API call to EasyIQ",
+      "fields": {
+        "uri": {
+          "name": "URI",
+          "description": "URI for the API call"
+        },
+        "post_data": {
+          "name": "POST Data",
+          "description": "JSON formatted post data, if not defined, request will be GET"
+        }
+      }
+    },
+    "refresh_data": {
+      "name": "Refresh Data",
+      "description": "Force refresh of all EasyIQ data",
+      "fields": {
+        "child_id": {
+          "name": "Child ID",
+          "description": "Specific child ID to refresh data for (optional, refreshes all if not specified)"
+        }
+      }
+    }
+  },
   "config": {
     "error": {
       "cannot_connect": "Failed to connect to EasyIQ",

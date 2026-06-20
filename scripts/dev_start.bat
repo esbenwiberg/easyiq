@@ -67,7 +67,7 @@ if not exist "%HASS_CONFIG_DIR%\configuration.yaml" (
         echo logger:
         echo   default: info
         echo   logs:
-        echo     custom_components.easyiq: debug
+        echo     custom_components.aula_easyiq: debug
         echo.
         echo # Development tools
         echo developer_tools:
