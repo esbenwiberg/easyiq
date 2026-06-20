@@ -35,6 +35,7 @@ EASYIQ_WIDGETS = {
 }
 
 # Configuration keys
+CONF_FIXTURE_BASE_URL = "fixture_base_url"
 CONF_SCHOOLSCHEDULE = "schoolschedule"
 CONF_WEEKPLAN = "weekplan"
 CONF_HOMEWORK = "homework"

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any, Callable
+from urllib.parse import urljoin
 import datetime
 import json
 
@@ -97,16 +98,20 @@ class EasyIQClient:
     def __init__(
         self,
         mitid_username: str,
-        token_state: AulaTokenState | dict[str, Any],
+        token_state: AulaTokenState | dict[str, Any] | None,
         *,
         token_refresher: TokenRefresher | None = None,
         on_token_update: Callable[[AulaTokenState], None] | None = None,
+        fixture_base_url: str | None = None,
         session_factory: Callable[[], Any] | None = None,
     ) -> None:
         """Initialize the client."""
         self.username = mitid_username
+        self.fixture_base_url = fixture_base_url.rstrip("/") if fixture_base_url else None
         self.token_state = (
-            token_state
+            None
+            if token_state is None
+            else token_state
             if isinstance(token_state, AulaTokenState)
             else AulaTokenState.from_entry_data(token_state)
         )
@@ -169,6 +174,62 @@ class EasyIQClient:
             )
         return self.session
 
+    @property
+    def fixture_mode(self) -> bool:
+        """Return true when the client should load fixture data instead of live APIs."""
+        return bool(self.fixture_base_url)
+
+    def _fixture_url(self, path: str) -> str:
+        """Build a fixture endpoint URL."""
+        if not self.fixture_base_url:
+            raise RuntimeError("fixture_base_url is not configured")
+        return urljoin(f"{self.fixture_base_url}/", path.lstrip("/"))
+
+    async def _fixture_json(self, path: str, default: Any) -> Any:
+        """Load JSON from the configured fixture server."""
+        session = await self._ensure_session()
+        url = self._fixture_url(path)
+        async with session.get(url) as response:
+            if response.status == 404:
+                _LOGGER.debug("Fixture endpoint %s returned 404; using default", url)
+                return default
+            response.raise_for_status()
+            return await response.json()
+
+    async def _authenticate_fixture(self) -> bool:
+        """Load fixture profile data and mark the client authenticated."""
+        profile = await self._fixture_json("aula_easyiq/profile", {})
+        children = profile.get("children", []) if isinstance(profile, dict) else []
+        institution_profiles = profile.get("institution_profiles", []) if isinstance(profile, dict) else []
+
+        self._profiles = [profile] if isinstance(profile, dict) else []
+        self._profile_context = profile.get("profile_context", []) if isinstance(profile, dict) else []
+        self._profilecontext = self._profile_context
+        self._institution_profiles = [str(item) for item in institution_profiles]
+        self._children_data = {}
+        self._childnames = {}
+        self._childuserids = []
+        self._childids = []
+        self.children = []
+
+        for child in children:
+            user_id = str(child.get("id") or child.get("userId") or child.get("user_id"))
+            actual_id = str(child.get("actual_id") or child.get("actualId") or child.get("aula_id") or user_id)
+            name = child.get("name", "Fixture Child")
+            self._childuserids.append(user_id)
+            self._childnames[user_id] = name
+            self._childids.append(actual_id)
+            self._children_data[user_id] = {
+                "id": actual_id,
+                "userId": user_id,
+                "name": name,
+            }
+            self.children.append({"id": user_id, "name": name})
+
+        self._authenticated = True
+        _LOGGER.info("Loaded EasyIQ fixture profile with %d children", len(self.children))
+        return True
+
     async def close(self) -> None:
         """Close the aiohttp session."""
         if self.session and not self.session.closed:
@@ -176,6 +237,10 @@ class EasyIQClient:
 
     def _ensure_valid_token(self) -> None:
         """Refresh token state when the Aula access token is expired."""
+        if self.fixture_mode:
+            return
+        if self.token_state is None:
+            raise EasyIQAuthError("Aula token state is missing")
         if not self.token_state.is_expired():
             return
 
@@ -317,6 +382,10 @@ class EasyIQClient:
 
     def login(self) -> bool:
         """Validate stored MitID/Aula token state and discover profile context."""
+        if self.fixture_mode:
+            self._authenticated = True
+            return True
+
         try:
             return self._authenticate_sync()
         except MitIDAuthError as err:
@@ -401,6 +470,10 @@ class EasyIQClient:
             weeks_ahead: Number of weeks ahead to fetch (0 = current week, 1 = next week, etc.)
         """
         try:
+            if self.fixture_mode:
+                events = await self._fixture_json(f"aula_easyiq/calendar/{child_id}", [])
+                return events if isinstance(events, list) else []
+
             # Run the synchronous calendar request in an executor to avoid blocking
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self._sync_get_calendar_events, child_id, weeks_ahead)
@@ -419,6 +492,9 @@ class EasyIQClient:
             weeks_ahead: Number of weeks ahead to start from (0=current week, 1=next week, etc.)
         """
         try:
+            if self.fixture_mode:
+                return await self._get_calendar_events(child_id, weeks_ahead)
+
             all_events = []
             current_date = datetime.datetime.now()
             
@@ -863,6 +939,13 @@ class EasyIQClient:
 
     async def get_messages(self) -> dict[str, Any]:
         """Get messages data from Aula API."""
+        if self.fixture_mode:
+            message = await self._fixture_json("aula_easyiq/messages", {})
+            if isinstance(message, dict):
+                self.unread_messages = int(message.get("unread_count", 0) or 0)
+                return message
+            return {}
+
         if not self._authenticated:
             _LOGGER.warning("Not authenticated - cannot fetch messages")
             return {}
@@ -982,6 +1065,13 @@ class EasyIQClient:
 
     async def get_presence(self, child_id: str) -> dict[str, Any]:
         """Get presence data using the proper Aula API."""
+        if self.fixture_mode:
+            presence = await self._fixture_json(f"aula_easyiq/presence/{child_id}", {})
+            if isinstance(presence, dict):
+                presence.setdefault("last_updated", datetime.datetime.now().isoformat())
+                return presence
+            return {}
+
         if not self._authenticated:
             _LOGGER.warning("Not authenticated - cannot fetch presence")
             return {}
@@ -1325,6 +1415,9 @@ class EasyIQClient:
 
     def _filter_events_by_days(self, events: list[dict[str, Any]], days: int) -> list[dict[str, Any]]:
         """Filter events to only include those within the specified number of business days."""
+        if self.fixture_mode:
+            return events
+
         if not events or days <= 0:
             return []
         
@@ -1438,6 +1531,9 @@ class EasyIQClient:
     async def authenticate(self) -> bool:
         """Authenticate with the EasyIQ API using async approach."""
         try:
+            if self.fixture_mode:
+                return await self._authenticate_fixture()
+
             # Run synchronous token validation/profile discovery in an executor.
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, self._authenticate_sync)

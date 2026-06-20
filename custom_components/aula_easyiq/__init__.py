@@ -11,6 +11,7 @@ from homeassistant.loader import async_get_integration
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .const import (
+    CONF_FIXTURE_BASE_URL,
     CONF_MITID_USERNAME,
     CONF_PASSWORD,
     CONF_REAUTH_REQUIRED,
@@ -45,17 +46,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as err:  # pylint: disable=broad-except
         _LOGGER.debug("Could not register MitID auth views during setup: %s", err)
 
-    if entry.data.get(CONF_REAUTH_REQUIRED) or CONF_PASSWORD in entry.data:
-        raise ConfigEntryAuthFailed("EasyIQ requires MitID reauthentication")
+    fixture_base_url = entry.data.get(CONF_FIXTURE_BASE_URL)
 
-    mitid_username = entry.data.get(CONF_MITID_USERNAME)
-    if not mitid_username:
-        raise ConfigEntryAuthFailed("EasyIQ MitID username is missing")
+    if fixture_base_url:
+        mitid_username = entry.data.get(CONF_MITID_USERNAME, "fixture")
+        token_state = None
+    else:
+        if entry.data.get(CONF_REAUTH_REQUIRED) or CONF_PASSWORD in entry.data:
+            raise ConfigEntryAuthFailed("EasyIQ requires MitID reauthentication")
 
-    try:
-        token_state = AulaTokenState.from_entry_data(entry.data)
-    except MitIDAuthError as err:
-        raise ConfigEntryAuthFailed("EasyIQ Aula token state is missing") from err
+        mitid_username = entry.data.get(CONF_MITID_USERNAME)
+        if not mitid_username:
+            raise ConfigEntryAuthFailed("EasyIQ MitID username is missing")
+
+        try:
+            token_state = AulaTokenState.from_entry_data(entry.data)
+        except MitIDAuthError as err:
+            raise ConfigEntryAuthFailed("EasyIQ Aula token state is missing") from err
 
     runtime_data = hass.data[DOMAIN].setdefault(entry.entry_id, {})
 
@@ -68,6 +75,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         token_state=token_state,
         token_refresher=AulaTokenRefresher(),
         on_token_update=_handle_token_update,
+        fixture_base_url=fixture_base_url,
     )
     
     # Create the data update coordinator
