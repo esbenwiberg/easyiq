@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from functools import partial
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -30,6 +31,19 @@ PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.CALENDAR,
 ]
+
+
+def _schedule_token_state_persist(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    new_token_state: AulaTokenState,
+) -> None:
+    """Persist refreshed Aula token state back on the Home Assistant loop."""
+    data = dict(entry.data)
+    data.update(new_token_state.as_entry_data())
+    hass.loop.call_soon_threadsafe(
+        partial(hass.config_entries.async_update_entry, entry, data=data)
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -68,13 +82,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     def _handle_token_update(new_token_state: AulaTokenState) -> None:
         runtime_data["token_state"] = new_token_state
-        data = dict(entry.data)
-        data.update(new_token_state.as_entry_data())
-        hass.loop.call_soon_threadsafe(
-            hass.config_entries.async_update_entry,
-            entry,
-            data=data,
-        )
+        _schedule_token_state_persist(hass, entry, new_token_state)
     
     # Create the EasyIQ client
     client = EasyIQClient(

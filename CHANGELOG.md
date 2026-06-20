@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.9] - 2026-06-21
+
+### Fixed
+- Schedule refreshed Aula token persistence without passing keyword arguments to Home Assistant's event loop callback scheduler
+
 ## [0.5.8] - 2026-06-21
 
 ### Fixed
