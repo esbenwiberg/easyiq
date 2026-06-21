@@ -477,6 +477,42 @@ class EasyIQTokenAuthTests(unittest.TestCase):
 
         self.assertEqual("Dansk", events[0]["courses"])
 
+    def test_calendar_response_prefers_courses_display_over_agenda_text(self) -> None:
+        next_business_date = self._next_business_date()
+
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 08:05",
+                    "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 09:35",
+                    "ItemType": 9,
+                    "Title": " ",
+                    "CoursesDisplay": "Dansk",
+                    "ActivitiesDisplay": "2A",
+                    "Description": "<p>Dagsorden:</p><p>&nbsp;</p>",
+                    "courses": "<p>Dagsorden:</p><p>&nbsp;</p>",
+                }
+            ]
+        )
+
+        self.assertEqual("Dansk", events[0]["courses"])
+        self.assertEqual("2A", events[0]["activities"])
+        self.assertEqual("Dagsorden:", events[0]["description"])
+
+    def test_homework_filter_accepts_easyiq_item_type_8(self) -> None:
+        events = [
+            {"itemType": 4, "courses": "Classic homework"},
+            {"ItemType": 8, "CoursesDisplay": "New homework"},
+            {"ItemType": 9, "CoursesDisplay": "Weekplan"},
+        ]
+
+        homework_events = client_module._events_of_types(events, (4, 8))
+
+        self.assertEqual(["Classic homework", "New homework"], [
+            event.get("courses") or event.get("CoursesDisplay")
+            for event in homework_events
+        ])
+
     def test_weekplan_html_groups_iso_event_dates(self) -> None:
         client = client_module.EasyIQClient(
             "guardian@example.test",

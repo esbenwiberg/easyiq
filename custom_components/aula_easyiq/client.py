@@ -151,6 +151,10 @@ _END_TIME_KEYS = (
     "slutTid",
 )
 _COURSE_KEYS = (
+    "coursesDisplay",
+    "courseDisplay",
+    "subjectsDisplay",
+    "subjectDisplay",
     "courses",
     "course",
     "courseName",
@@ -182,6 +186,8 @@ _COURSE_KEYS = (
     "tekst",
 )
 _ACTIVITY_KEYS = (
+    "activitiesDisplay",
+    "activityDisplay",
     "activities",
     "activity",
     "activityName",
@@ -277,6 +283,18 @@ def _event_title_text(event: dict[str, Any]) -> str:
         if text:
             return text
     return "School Event"
+
+
+def _is_generic_calendar_title(value: Any) -> bool:
+    """Return true when a title is blank, generic, or agenda/body text."""
+    text = _clean_text(value).lower()
+    if not text:
+        return True
+    if text == "school event":
+        return True
+    if text.startswith("dagsorden"):
+        return True
+    return False
 
 
 def _parse_easyiq_datetime(value: Any) -> datetime.datetime | None:
@@ -421,6 +439,14 @@ def _events_of_type(events: list[dict[str, Any]], item_type: int) -> list[dict[s
     return [event for event in events if _event_item_type(event) == item_type]
 
 
+def _events_of_types(
+    events: list[dict[str, Any]],
+    item_types: tuple[int, ...],
+) -> list[dict[str, Any]]:
+    """Return EasyIQ events matching any normalized item type."""
+    return [event for event in events if _event_item_type(event) in item_types]
+
+
 def _event_type_counts(events: list[dict[str, Any]]) -> dict[str, int]:
     """Return a compact item type histogram for diagnostics."""
     counts: dict[str, int] = {}
@@ -466,15 +492,15 @@ def _normalize_calendar_event(event: dict[str, Any]) -> dict[str, Any]:
         normalized["end"] = (start + datetime.timedelta(hours=1)).isoformat()
 
     courses = _event_title_text(event)
-    if courses and not str(normalized.get("courses", "")).strip():
+    if courses and _is_generic_calendar_title(normalized.get("courses")):
         normalized["courses"] = courses
 
     activities = _field_text(_event_value(event, _ACTIVITY_KEYS))
-    if activities and not normalized.get("activities"):
+    if activities and not _clean_text(normalized.get("activities")):
         normalized["activities"] = activities
 
     description = _field_text(_event_value(event, _DESCRIPTION_KEYS))
-    if description and not normalized.get("description"):
+    if description and not _clean_text(normalized.get("description")):
         normalized["description"] = description
 
     if _event_item_type(normalized) is None and start is not None:
@@ -1557,8 +1583,9 @@ class EasyIQClient:
                     "event_type_counts": {},
                 }
             
-            # Filter for homework events (itemType 4 = homework/assignments)
-            homework_events = _events_of_type(events, 4)
+            # Filter for homework/assignment events. EasyIQ has returned both
+            # itemType 4 and itemType 8 for homework-like calendar rows.
+            homework_events = _events_of_types(events, (4, 8))
             
             # Process homework events
             current_date = datetime.datetime.now()
@@ -1902,7 +1929,7 @@ class EasyIQClient:
                         
                         # Separate weekplan and homework events
                         all_weekplan_events = _events_of_type(business_day_events, 9)
-                        all_homework_events = _events_of_type(business_day_events, 4)
+                        all_homework_events = _events_of_types(business_day_events, (4, 8))
                         
                         # Filter events based on configured days
                         weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
@@ -2090,7 +2117,7 @@ class EasyIQClient:
                             
                             if update_homework:
                                 # Separate and filter homework events
-                                all_homework_events = _events_of_type(business_day_events, 4)
+                                all_homework_events = _events_of_types(business_day_events, (4, 8))
                                 homework_events = self._filter_events_by_days(all_homework_events, homework_days)
                                 homework_assignments = []
                                 for event in homework_events:

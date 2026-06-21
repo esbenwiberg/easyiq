@@ -238,9 +238,15 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
             
             # Create CalendarEvent object for weekplan
             summary = _first_text(
+                event_data.get('CoursesDisplay'),
+                event_data.get('coursesDisplay'),
                 event_data.get('courses'),
+                event_data.get('CourseDisplay'),
+                event_data.get('courseDisplay'),
                 event_data.get('subject'),
                 event_data.get('title'),
+                event_data.get('ActivitiesDisplay'),
+                event_data.get('activitiesDisplay'),
                 event_data.get('activities'),
                 event_data.get('description'),
                 default='School Event',

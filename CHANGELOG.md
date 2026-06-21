@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.15] - 2026-06-21
+
+### Fixed
+- Use EasyIQ `CoursesDisplay` as the primary visible calendar event title
+- Use EasyIQ `ActivitiesDisplay` as the class/activity label
+- Include EasyIQ `ItemType` 8 rows as homework/assignment calendar candidates
+
 ## [0.5.14] - 2026-06-21
 
 ### Fixed
