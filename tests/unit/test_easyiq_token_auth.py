@@ -308,6 +308,11 @@ class EasyIQTokenAuthTests(unittest.TestCase):
         self.assertEqual(["200", "100"], calendar_login_ids)
         self.assertEqual("Math", events[0]["courses"])
         self.assertEqual("100", client._calendar_login_id_cache["100"])
+        diagnostics = client.calendar_diagnostics["100"]["week_offsets"]["0"]
+        self.assertEqual("success", diagnostics["stage"])
+        self.assertEqual("user-login/user-child", diagnostics["successful_variant"])
+        self.assertEqual(1, diagnostics["raw_event_count"])
+        self.assertEqual({"9": 1}, diagnostics["event_type_counts"])
 
     def test_calendar_events_fall_back_to_guardian_login_context(self) -> None:
         fake_session = CalendarGuardianLoginSession()

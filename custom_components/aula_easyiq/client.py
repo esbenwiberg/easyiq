@@ -175,6 +175,18 @@ def _event_type_counts(events: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _payload_summary(payload: Any) -> dict[str, Any]:
+    """Return a small, serializable description of an API payload."""
+    if isinstance(payload, list):
+        return {"type": "list", "length": len(payload)}
+    if isinstance(payload, dict):
+        return {
+            "type": "dict",
+            "keys": [str(key) for key in list(payload.keys())[:12]],
+        }
+    return {"type": type(payload).__name__}
+
+
 def _extract_calendar_event_list(payload: Any) -> list[dict[str, Any]]:
     """Normalize known EasyIQ calendar response wrappers to a list of events."""
     if isinstance(payload, list):
@@ -251,6 +263,7 @@ class EasyIQClient:
         self.tokens = {}
         self._calendar_login_id_cache = {}
         self._calendar_request_variant_cache = {}
+        self._calendar_zero_warning_emitted: set[str] = set()
         
         # Data storage
         self.children = []
@@ -263,6 +276,54 @@ class EasyIQClient:
         self.homework_data = {}
         self.presence_status = {}  # Stores presence status codes (0-8)
         self.presence_data = {}    # Stores detailed presence information
+        self.update_diagnostics: dict[str, Any] = {}
+        self.calendar_diagnostics: dict[str, Any] = {}
+
+    def _now_text(self) -> str:
+        """Return a serializable timestamp for diagnostics."""
+        return datetime.datetime.now().isoformat()
+
+    def _record_calendar_week_diagnostic(
+        self,
+        child_id: str,
+        weeks_ahead: int,
+        **values: Any,
+    ) -> None:
+        """Store diagnostic details for a single calendar week request."""
+        child_diag = self.calendar_diagnostics.setdefault(str(child_id), {})
+        week_offsets = child_diag.setdefault("week_offsets", {})
+        week_diag = week_offsets.setdefault(str(weeks_ahead), {})
+        week_diag.update(values)
+        week_diag["last_updated"] = self._now_text()
+
+    def _record_calendar_summary(self, child_id: str, **values: Any) -> None:
+        """Store visible calendar diagnostics for a child."""
+        child_diag = self.calendar_diagnostics.setdefault(str(child_id), {})
+        child_diag.update(values)
+        child_diag["last_updated"] = self._now_text()
+
+    def _warn_zero_calendar_once(
+        self,
+        child_id: str,
+        *,
+        raw_event_count: int,
+        business_day_event_count: int,
+        event_type_counts: dict[str, int],
+    ) -> None:
+        """Emit one warning for silent empty calendar data."""
+        key = str(child_id)
+        if key in self._calendar_zero_warning_emitted:
+            return
+        self._calendar_zero_warning_emitted.add(key)
+        _LOGGER.warning(
+            "EasyIQ calendar returned no business-day events for child %s "
+            "(raw=%d, business_days=%d, item_types=%s). Diagnostics are "
+            "available on the EasyIQ Status and Weekplan sensor attributes.",
+            child_id,
+            raw_event_count,
+            business_day_event_count,
+            event_type_counts,
+        )
 
     def _ensure_sync_session(self) -> Any:
         """Return an initialized synchronous requests-like session."""
@@ -618,6 +679,7 @@ class EasyIQClient:
             # Filter events to only include the next N business days
             business_day_events = []
             business_days_found = 0
+            target_dates = []
             
             # Start from the beginning of the target week
             if weeks_ahead == 0:
@@ -635,6 +697,7 @@ class EasyIQClient:
             while business_days_found < days:
                 # Skip weekends (Saturday=5, Sunday=6)
                 if check_date.weekday() < 5:  # Monday=0 to Friday=4
+                    target_dates.append(check_date.isoformat())
                     # Find events for this business day
                     day_events = [
                         event for event in all_events 
@@ -646,6 +709,26 @@ class EasyIQClient:
                 # Move to next day
                 check_date += datetime.timedelta(days=1)
             
+            raw_type_counts = _event_type_counts(all_events)
+            business_day_type_counts = _event_type_counts(business_day_events)
+            self._record_calendar_summary(
+                child_id,
+                requested_business_days=days,
+                requested_weeks_ahead=weeks_ahead,
+                target_dates=target_dates,
+                raw_event_count=len(all_events),
+                business_day_event_count=len(business_day_events),
+                raw_event_type_counts=raw_type_counts,
+                business_day_event_type_counts=business_day_type_counts,
+            )
+            if not business_day_events:
+                self._warn_zero_calendar_once(
+                    child_id,
+                    raw_event_count=len(all_events),
+                    business_day_event_count=len(business_day_events),
+                    event_type_counts=raw_type_counts,
+                )
+
             week_desc = "current week" if weeks_ahead == 0 else f"{weeks_ahead} week{'s' if weeks_ahead > 1 else ''} ahead"
             _LOGGER.info(
                 "Found %d events for next %d business days starting from %s "
@@ -671,8 +754,20 @@ class EasyIQClient:
         try:
             # Get authentication token for EasyIQ widget
             token = self.get_token(EASYIQ_WEEKPLAN_WIDGET_ID)
+            self._record_calendar_week_diagnostic(
+                child_id,
+                weeks_ahead,
+                stage="widget_token",
+                token_available=bool(token),
+            )
             if not token:
                 _LOGGER.error("Failed to get token for EasyIQ widget")
+                self._record_calendar_week_diagnostic(
+                    child_id,
+                    weeks_ahead,
+                    stage="widget_token_failed",
+                    token_available=False,
+                )
                 return []
             
             # Prepare the request exactly like Chrome DevTools
@@ -685,6 +780,12 @@ class EasyIQClient:
                 _LOGGER.error(f"Child data not found for ID: {child_id}")
                 _LOGGER.debug(f"Available child data keys: {list(self._children_data.keys())}")
                 _LOGGER.debug(f"Children data: {self._children_data}")
+                self._record_calendar_week_diagnostic(
+                    child_id,
+                    weeks_ahead,
+                    stage="child_data_missing",
+                    available_child_ids=list(self._children_data.keys()),
+                )
                 return []
             
             # EasyIQ has historically accepted different Aula identifiers in
@@ -815,6 +916,15 @@ class EasyIQClient:
             last_response = None
             last_params = None
             failed_attempts = []
+            attempt_summaries = []
+            self._record_calendar_week_diagnostic(
+                child_id,
+                weeks_ahead,
+                stage="requesting",
+                variant_count=len(request_variants),
+                variants=[variant["name"] for variant in request_variants],
+                request_date=target_date.isoformat() + "Z",
+            )
             for variant in request_variants:
                 params = {
                     "loginId": variant["login_id"],
@@ -854,6 +964,14 @@ class EasyIQClient:
                     failed_attempts.append(
                         f"{variant['name']}={response.status_code}"
                     )
+                    attempt_summaries.append(
+                        {
+                            "variant": variant["name"],
+                            "status_code": response.status_code,
+                            "content_type": response.headers.get("content-type", ""),
+                            "events": None,
+                        }
+                    )
                     _LOGGER.debug(
                         "Calendar events variant %s returned status %s",
                         variant["name"],
@@ -869,10 +987,16 @@ class EasyIQClient:
 
                     # Let requests handle decompression automatically (including Brotli)
                     # This is more reliable than manual decompression
+                    json_error_text = None
+                    payload_summary: dict[str, Any] = {}
+                    manual_brotli_error = None
                     try:
-                        events = _extract_calendar_event_list(response.json())
+                        payload = response.json()
+                        payload_summary = _payload_summary(payload)
+                        events = _extract_calendar_event_list(payload)
                         _LOGGER.debug(f"Successfully parsed JSON response with {len(events)} events")
                     except Exception as json_error:
+                        json_error_text = str(json_error)
                         _LOGGER.error(f"Failed to parse JSON response: {json_error}")
                         # Try manual decompression as last resort
                         content_encoding = response.headers.get('content-encoding', '').lower()
@@ -883,16 +1007,41 @@ class EasyIQClient:
                                 decompressed_content = brotli.decompress(response.content)
                                 json_text = decompressed_content.decode('utf-8')
                                 import json
-                                events = _extract_calendar_event_list(json.loads(json_text))
+                                payload = json.loads(json_text)
+                                payload_summary = _payload_summary(payload)
+                                events = _extract_calendar_event_list(payload)
                                 _LOGGER.debug("Manual Brotli decompression successful")
                             except Exception as decomp_error:
+                                manual_brotli_error = str(decomp_error)
                                 _LOGGER.debug(f"Manual Brotli decompression also failed: {decomp_error}")
                                 events = []
                         else:
                             events = []
 
+                    attempt_summaries.append(
+                        {
+                            "variant": variant["name"],
+                            "status_code": response.status_code,
+                            "content_type": response.headers.get("content-type", ""),
+                            "content_encoding": response.headers.get("content-encoding", ""),
+                            "events": len(events),
+                            "payload": payload_summary,
+                            "json_error": json_error_text,
+                            "manual_brotli_error": manual_brotli_error,
+                        }
+                    )
                     self._calendar_login_id_cache[str(child_id)] = variant["login_id"]
                     self._calendar_request_variant_cache[str(child_id)] = variant
+                    self._record_calendar_week_diagnostic(
+                        child_id,
+                        weeks_ahead,
+                        stage="success",
+                        successful_variant=variant["name"],
+                        status_code=response.status_code,
+                        raw_event_count=len(events),
+                        event_type_counts=_event_type_counts(events),
+                        attempts=attempt_summaries[-8:],
+                    )
                     _LOGGER.info("🎉 Successfully retrieved %d calendar events!", len(events))
 
                     # Log some sample data for debugging
@@ -904,6 +1053,21 @@ class EasyIQClient:
                     return events
                 except Exception as e:
                     _LOGGER.error("Failed to parse calendar events JSON: %s", e)
+                    attempt_summaries.append(
+                        {
+                            "variant": variant["name"],
+                            "status_code": response.status_code,
+                            "content_type": response.headers.get("content-type", ""),
+                            "events": None,
+                            "parse_error": str(e),
+                        }
+                    )
+                    self._record_calendar_week_diagnostic(
+                        child_id,
+                        weeks_ahead,
+                        stage="parse_failed",
+                        attempts=attempt_summaries[-8:],
+                    )
                     # Try to get more info about the response
                     try:
                         content_type = response.headers.get('content-type', '')
@@ -927,12 +1091,26 @@ class EasyIQClient:
                     response_preview,
                 )
                 _LOGGER.debug("Calendar events failed request params: %s", last_params)
+                self._record_calendar_week_diagnostic(
+                    child_id,
+                    weeks_ahead,
+                    stage="http_failed",
+                    status_code=last_response.status_code,
+                    failed_attempts=failed_attempts,
+                    attempts=attempt_summaries[-8:],
+                )
             return []
                 
         except MitIDAuthError:
             raise
         except Exception as err:
             _LOGGER.error("Failed to get calendar events: %s", err)
+            self._record_calendar_week_diagnostic(
+                child_id,
+                weeks_ahead,
+                stage="exception",
+                error=str(err),
+            )
             return []
 
     async def get_children(self) -> list[dict[str, Any]]:
@@ -1318,11 +1496,27 @@ class EasyIQClient:
     async def update_data(self, weekplan_days: int = 5, homework_days: int = 5) -> None:
         """Update all data from the API using business days approach."""
         try:
+            self.update_diagnostics = {
+                "last_update_started": self._now_text(),
+                "mode": "full",
+                "weekplan_days": weekplan_days,
+                "homework_days": homework_days,
+            }
             # First authenticate if not already authenticated
             await self.authenticate()
             
             # Update children data
             self.children = await self.get_children()
+            self.update_diagnostics.update(
+                {
+                    "children_count": len(self.children),
+                    "children": [
+                        child.get("name", "Unknown") for child in self.children
+                    ],
+                }
+            )
+            if not self.children:
+                _LOGGER.warning("EasyIQ update found no children after authentication")
             
             # Update weekplan, homework, and presence data for each child using business days approach
             self.weekplan_data = {}
@@ -1438,11 +1632,18 @@ class EasyIQClient:
             _LOGGER.debug(f"  Weekplan data keys: {list(self.weekplan_data.keys())}")
             _LOGGER.debug(f"  Homework data keys: {list(self.homework_data.keys())}")
             _LOGGER.debug(f"  Presence data keys: {list(self.presence_data.keys())}")
+            self.update_diagnostics["last_update_finished"] = self._now_text()
             
         except MitIDAuthError:
             raise
         except Exception as err:
             _LOGGER.error("Failed to update data: %s", err)
+            self.update_diagnostics.update(
+                {
+                    "last_update_finished": self._now_text(),
+                    "error": str(err),
+                }
+            )
             raise
 
     async def update_data_selective(
@@ -1456,11 +1657,31 @@ class EasyIQClient:
     ) -> None:
         """Update specific data types from the API based on flags."""
         try:
+            self.update_diagnostics = {
+                "last_update_started": self._now_text(),
+                "mode": "selective",
+                "update_weekplan": update_weekplan,
+                "update_homework": update_homework,
+                "update_presence": update_presence,
+                "update_messages": update_messages,
+                "weekplan_days": weekplan_days,
+                "homework_days": homework_days,
+            }
             # First authenticate if not already authenticated
             await self.authenticate()
             
             # Always update children data (lightweight operation)
             self.children = await self.get_children()
+            self.update_diagnostics.update(
+                {
+                    "children_count": len(self.children),
+                    "children": [
+                        child.get("name", "Unknown") for child in self.children
+                    ],
+                }
+            )
+            if not self.children:
+                _LOGGER.warning("EasyIQ update found no children after authentication")
             
             # Initialize data structures if they don't exist
             if not hasattr(self, 'weekplan_data'):
@@ -1570,11 +1791,18 @@ class EasyIQClient:
                     _LOGGER.error(f"Failed to update messages: {messages_err}")
             
             _LOGGER.debug("Selective data update completed successfully")
+            self.update_diagnostics["last_update_finished"] = self._now_text()
             
         except MitIDAuthError:
             raise
         except Exception as err:
             _LOGGER.error("Failed to update data selectively: %s", err)
+            self.update_diagnostics.update(
+                {
+                    "last_update_finished": self._now_text(),
+                    "error": str(err),
+                }
+            )
             raise
 
     def _filter_events_by_days(self, events: list[dict[str, Any]], days: int) -> list[dict[str, Any]]:

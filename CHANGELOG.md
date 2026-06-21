@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.11] - 2026-06-21
+
+### Added
+- Add an always-present EasyIQ Status sensor with update and calendar request diagnostics
+- Expose calendar request attempts, response status codes, payload shapes, raw event counts, and item type counts on diagnostic attributes
+- Warn once per child when EasyIQ returns no business-day calendar events so silent empty-data cases appear in normal Home Assistant logs
+
 ## [0.5.10] - 2026-06-21
 
 ### Fixed
