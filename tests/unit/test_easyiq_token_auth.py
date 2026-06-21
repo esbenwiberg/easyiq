@@ -424,6 +424,23 @@ class EasyIQTokenAuthTests(unittest.TestCase):
         self.assertEqual(1, len(filtered))
         self.assertEqual("Math", filtered[0]["courses"])
 
+    def test_calendar_response_replaces_blank_course_title(self) -> None:
+        next_business_date = self._next_business_date()
+
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "date": next_business_date.isoformat(),
+                    "startTime": "08:00",
+                    "endTime": "09:00",
+                    "courses": "",
+                    "subjectTitle": "Matematik",
+                }
+            ]
+        )
+
+        self.assertEqual("Matematik", events[0]["courses"])
+
     def test_weekplan_html_groups_iso_event_dates(self) -> None:
         client = client_module.EasyIQClient(
             "guardian@example.test",

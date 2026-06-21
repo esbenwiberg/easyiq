@@ -152,19 +152,44 @@ _COURSE_KEYS = (
     "courses",
     "course",
     "courseName",
+    "courseTitle",
+    "courseText",
     "subject",
     "subjectName",
+    "subjectTitle",
+    "subjectText",
+    "schoolSubject",
+    "schoolSubjectName",
     "title",
+    "eventTitle",
+    "calendarTitle",
+    "calendarText",
+    "entryTitle",
+    "displayName",
+    "heading",
+    "headline",
     "name",
     "text",
+    "fag",
+    "fagNavn",
+    "titel",
+    "tekst",
 )
 _ACTIVITY_KEYS = (
     "activities",
     "activity",
     "activityName",
+    "activityTitle",
+    "activityText",
     "lesson",
     "lessonName",
+    "lessonTitle",
     "class",
+    "className",
+    "team",
+    "teamName",
+    "hold",
+    "holdNavn",
 )
 _DESCRIPTION_KEYS = (
     "description",
@@ -195,7 +220,22 @@ def _field_text(value: Any) -> str:
     if value in (None, ""):
         return ""
     if isinstance(value, dict):
-        for key in ("name", "title", "text", "label", "value", "description"):
+        for key in (
+            "name",
+            "displayName",
+            "fullName",
+            "shortName",
+            "title",
+            "text",
+            "label",
+            "value",
+            "description",
+            "subject",
+            "course",
+            "heading",
+            "headline",
+            "caption",
+        ):
             text = _field_text(value.get(key))
             if text:
                 return text
@@ -204,6 +244,15 @@ def _field_text(value: Any) -> str:
         parts = [_field_text(item) for item in value]
         return ", ".join(part for part in parts if part)
     return str(value)
+
+
+def _event_title_text(event: dict[str, Any]) -> str:
+    """Return the best visible title for a calendar event."""
+    for keys in (_COURSE_KEYS, _ACTIVITY_KEYS, _DESCRIPTION_KEYS):
+        text = _field_text(_event_value(event, keys)).strip()
+        if text:
+            return text
+    return "School Event"
 
 
 def _parse_easyiq_datetime(value: Any) -> datetime.datetime | None:
@@ -392,8 +441,8 @@ def _normalize_calendar_event(event: dict[str, Any]) -> dict[str, Any]:
     elif start is not None and not normalized.get("end"):
         normalized["end"] = (start + datetime.timedelta(hours=1)).isoformat()
 
-    courses = _field_text(_event_value(event, _COURSE_KEYS))
-    if courses and not normalized.get("courses"):
+    courses = _event_title_text(event)
+    if courses and not str(normalized.get("courses", "")).strip():
         normalized["courses"] = courses
 
     activities = _field_text(_event_value(event, _ACTIVITY_KEYS))

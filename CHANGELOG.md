@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.13] - 2026-06-21
+
+### Fixed
+- Treat timezone-less EasyIQ calendar timestamps as Home Assistant local time instead of UTC
+- Prevent blank calendar event titles by falling back through subject, title, activity, description, and "School Event"
+- Replace blank `courses` values during EasyIQ event normalization when another title field is available
+
 ## [0.5.12] - 2026-06-21
 
 ### Fixed

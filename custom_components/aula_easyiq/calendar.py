@@ -16,6 +16,46 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+def _first_text(*values: Any, default: str = "") -> str:
+    """Return the first non-empty text value."""
+    for value in values:
+        if value in (None, ""):
+            continue
+        if isinstance(value, dict):
+            text = _first_text(
+                value.get("name"),
+                value.get("displayName"),
+                value.get("title"),
+                value.get("text"),
+                value.get("label"),
+                value.get("value"),
+            )
+            if text:
+                return text
+            continue
+        if isinstance(value, list):
+            text = ", ".join(
+                item_text
+                for item in value
+                if (item_text := _first_text(item))
+            )
+            if text:
+                return text
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return default
+
+
+def _as_easyiq_local_datetime(parsed: datetime) -> datetime:
+    """Treat timezone-less EasyIQ timestamps as Home Assistant local time."""
+    if parsed.tzinfo is not None:
+        return dt_util.as_local(parsed)
+    timezone = getattr(dt_util, "DEFAULT_TIME_ZONE", None) or dt_util.now().tzinfo or dt_util.UTC
+    return parsed.replace(tzinfo=timezone)
+
+
 def _parse_easyiq_datetime(value: Any) -> datetime | None:
     """Parse EasyIQ calendar date strings in known legacy and ISO formats."""
     if not value:
@@ -28,9 +68,7 @@ def _parse_easyiq_datetime(value: Any) -> datetime | None:
     normalized = text.replace("Z", "+00:00")
     try:
         parsed = datetime.fromisoformat(normalized)
-        if parsed.tzinfo is not None:
-            return dt_util.as_local(parsed)
-        return dt_util.as_local(parsed.replace(tzinfo=dt_util.UTC))
+        return _as_easyiq_local_datetime(parsed)
     except ValueError:
         pass
 
@@ -42,7 +80,7 @@ def _parse_easyiq_datetime(value: Any) -> datetime | None:
     ):
         try:
             parsed = datetime.strptime(text, date_format)
-            return dt_util.as_local(parsed.replace(tzinfo=dt_util.UTC))
+            return _as_easyiq_local_datetime(parsed)
         except ValueError:
             continue
 
@@ -187,7 +225,14 @@ class EasyIQWeekplanCalendarEntity(CalendarEntity):
                 event_end = event_start
             
             # Create CalendarEvent object for weekplan
-            summary = event_data.get('courses', 'School Event')
+            summary = _first_text(
+                event_data.get('courses'),
+                event_data.get('subject'),
+                event_data.get('title'),
+                event_data.get('activities'),
+                event_data.get('description'),
+                default='School Event',
+            )
             description_parts = []
             
             # Add activities if available
