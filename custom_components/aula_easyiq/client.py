@@ -88,6 +88,124 @@ except ImportError:
 _LOGGER = logging.getLogger(__name__)
 
 
+_START_DATETIME_KEYS = (
+    "start",
+    "startDateTime",
+    "startDatetime",
+    "start_time",
+    "startTime",
+    "startTimeUtc",
+    "from",
+    "fromDateTime",
+    "fromDatetime",
+    "begin",
+    "beginDateTime",
+    "beginDatetime",
+    "dateStart",
+)
+_START_DATE_KEYS = (
+    "startDate",
+    "start_date",
+    "date",
+    "eventDate",
+    "day",
+    "dato",
+)
+_START_TIME_KEYS = (
+    "startTime",
+    "start_time",
+    "fromTime",
+    "beginTime",
+    "time",
+    "tid",
+)
+_END_DATETIME_KEYS = (
+    "end",
+    "endDateTime",
+    "endDatetime",
+    "end_time",
+    "endTime",
+    "endTimeUtc",
+    "to",
+    "toDateTime",
+    "toDatetime",
+    "finish",
+    "finishDateTime",
+    "dateEnd",
+)
+_END_DATE_KEYS = (
+    "endDate",
+    "end_date",
+    "date",
+    "eventDate",
+    "day",
+    "dato",
+)
+_END_TIME_KEYS = (
+    "endTime",
+    "end_time",
+    "toTime",
+    "finishTime",
+    "slutTid",
+)
+_COURSE_KEYS = (
+    "courses",
+    "course",
+    "courseName",
+    "subject",
+    "subjectName",
+    "title",
+    "name",
+    "text",
+)
+_ACTIVITY_KEYS = (
+    "activities",
+    "activity",
+    "activityName",
+    "lesson",
+    "lessonName",
+    "class",
+)
+_DESCRIPTION_KEYS = (
+    "description",
+    "details",
+    "note",
+    "notes",
+    "content",
+    "body",
+    "comment",
+)
+
+
+def _event_value(event: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    """Return the first non-empty value for any key, case-insensitively."""
+    lower_key_map = {str(key).lower(): key for key in event}
+    for key in keys:
+        actual_key = key if key in event else lower_key_map.get(key.lower())
+        if actual_key is None:
+            continue
+        value = event.get(actual_key)
+        if value not in (None, ""):
+            return value
+    return None
+
+
+def _field_text(value: Any) -> str:
+    """Return readable text from common EasyIQ scalar/list/dict fields."""
+    if value in (None, ""):
+        return ""
+    if isinstance(value, dict):
+        for key in ("name", "title", "text", "label", "value", "description"):
+            text = _field_text(value.get(key))
+            if text:
+                return text
+        return ""
+    if isinstance(value, list):
+        parts = [_field_text(item) for item in value]
+        return ", ".join(part for part in parts if part)
+    return str(value)
+
+
 def _parse_easyiq_datetime(value: Any) -> datetime.datetime | None:
     """Parse EasyIQ calendar date strings in known legacy and ISO formats."""
     if not value:
@@ -108,6 +226,8 @@ def _parse_easyiq_datetime(value: Any) -> datetime.datetime | None:
         "%Y/%m/%d %H:%M:%S",
         "%Y-%m-%d %H:%M",
         "%Y-%m-%d %H:%M:%S",
+        "%Y/%m/%d",
+        "%Y-%m-%d",
     ):
         try:
             return datetime.datetime.strptime(text, date_format)
@@ -125,6 +245,14 @@ def _event_date(value: Any) -> datetime.date | None:
     return None
 
 
+def _event_start_date(event: dict[str, Any]) -> datetime.date | None:
+    """Return the calendar date for an event from known EasyIQ fields."""
+    parsed = _event_start_datetime(event)
+    if parsed is not None:
+        return parsed.date()
+    return _event_date(event.get("start"))
+
+
 def _event_time_text(value: Any) -> str:
     """Return a readable time for an EasyIQ event timestamp."""
     parsed = _parse_easyiq_datetime(value)
@@ -138,10 +266,65 @@ def _event_time_text(value: Any) -> str:
     return text
 
 
+def _event_datetime(
+    event: dict[str, Any],
+    datetime_keys: tuple[str, ...],
+    date_keys: tuple[str, ...],
+    time_keys: tuple[str, ...],
+) -> datetime.datetime | None:
+    """Parse an event timestamp from combined or split EasyIQ fields."""
+    for key in datetime_keys:
+        value = _event_value(event, (key,))
+        parsed = _parse_easyiq_datetime(value)
+        if parsed is not None:
+            return parsed
+
+    date_value = _event_value(event, date_keys)
+    time_value = _event_value(event, time_keys)
+    if date_value and time_value:
+        for separator in (" ", "T"):
+            parsed = _parse_easyiq_datetime(f"{date_value}{separator}{time_value}")
+            if parsed is not None:
+                return parsed
+
+    return _parse_easyiq_datetime(date_value)
+
+
+def _event_start_datetime(event: dict[str, Any]) -> datetime.datetime | None:
+    """Return the event start timestamp from known EasyIQ fields."""
+    return _event_datetime(
+        event,
+        _START_DATETIME_KEYS,
+        _START_DATE_KEYS,
+        _START_TIME_KEYS,
+    )
+
+
+def _event_end_datetime(event: dict[str, Any]) -> datetime.datetime | None:
+    """Return the event end timestamp from known EasyIQ fields."""
+    return _event_datetime(
+        event,
+        _END_DATETIME_KEYS,
+        _END_DATE_KEYS,
+        _END_TIME_KEYS,
+    )
+
+
 def _event_item_type(event: dict[str, Any]) -> int | None:
     """Return the EasyIQ item type as an integer when present."""
-    for key in ("itemType", "itemTypeId"):
-        value = event.get(key)
+    for key in (
+        "itemType",
+        "itemTypeId",
+        "type",
+        "typeId",
+        "eventType",
+        "eventTypeId",
+        "calendarItemType",
+        "calendarItemTypeId",
+        "activityType",
+        "activityTypeId",
+    ):
+        value = _event_value(event, (key,))
         if isinstance(value, dict):
             value = value.get("id", value.get("value"))
 
@@ -175,6 +358,59 @@ def _event_type_counts(events: list[dict[str, Any]]) -> dict[str, int]:
     return counts
 
 
+def _preview_value(value: Any) -> Any:
+    """Return a small JSON-friendly preview value for diagnostics."""
+    if isinstance(value, dict):
+        preview: dict[str, Any] = {}
+        for key, nested_value in list(value.items())[:8]:
+            preview[str(key)] = _preview_value(nested_value)
+        return preview
+    if isinstance(value, list):
+        return [_preview_value(item) for item in value[:3]]
+    text = str(value)
+    return text[:160] if len(text) > 160 else text
+
+
+def _event_preview(event: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact event preview for diagnostics."""
+    return {
+        str(key): _preview_value(value)
+        for key, value in list(event.items())[:20]
+    }
+
+
+def _normalize_calendar_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Populate the legacy fields this integration expects from newer shapes."""
+    normalized = dict(event)
+    start = _event_start_datetime(event)
+    end = _event_end_datetime(event)
+
+    if start is not None and not normalized.get("start"):
+        normalized["start"] = start.isoformat()
+    if end is not None and not normalized.get("end"):
+        normalized["end"] = end.isoformat()
+    elif start is not None and not normalized.get("end"):
+        normalized["end"] = (start + datetime.timedelta(hours=1)).isoformat()
+
+    courses = _field_text(_event_value(event, _COURSE_KEYS))
+    if courses and not normalized.get("courses"):
+        normalized["courses"] = courses
+
+    activities = _field_text(_event_value(event, _ACTIVITY_KEYS))
+    if activities and not normalized.get("activities"):
+        normalized["activities"] = activities
+
+    description = _field_text(_event_value(event, _DESCRIPTION_KEYS))
+    if description and not normalized.get("description"):
+        normalized["description"] = description
+
+    if _event_item_type(normalized) is None and start is not None:
+        normalized["itemType"] = 9
+        normalized["_easyiq_item_type_inferred"] = "weekplan"
+
+    return normalized
+
+
 def _payload_summary(payload: Any) -> dict[str, Any]:
     """Return a small, serializable description of an API payload."""
     if isinstance(payload, list):
@@ -187,11 +423,16 @@ def _payload_summary(payload: Any) -> dict[str, Any]:
     return {"type": type(payload).__name__}
 
 
-def _extract_calendar_event_list(payload: Any) -> list[dict[str, Any]]:
+def _extract_calendar_event_list(
+    payload: Any,
+    *,
+    normalize: bool = True,
+) -> list[dict[str, Any]]:
     """Normalize known EasyIQ calendar response wrappers to a list of events."""
+    events: list[dict[str, Any]] = []
     if isinstance(payload, list):
-        return [event for event in payload if isinstance(event, dict)]
-    if isinstance(payload, dict):
+        events = [event for event in payload if isinstance(event, dict)]
+    elif isinstance(payload, dict):
         for key in (
             "events",
             "calendarEvents",
@@ -203,12 +444,19 @@ def _extract_calendar_event_list(payload: Any) -> list[dict[str, Any]]:
         ):
             value = payload.get(key)
             if isinstance(value, list):
-                return [event for event in value if isinstance(event, dict)]
+                events = [event for event in value if isinstance(event, dict)]
+                break
             if isinstance(value, dict):
-                nested_events = _extract_calendar_event_list(value)
+                nested_events = _extract_calendar_event_list(
+                    value,
+                    normalize=normalize,
+                )
                 if nested_events:
                     return nested_events
-    return []
+
+    if normalize:
+        return [_normalize_calendar_event(event) for event in events]
+    return events
 
 
 class EasyIQAuthError(MitIDAuthError):
@@ -701,7 +949,7 @@ class EasyIQClient:
                     # Find events for this business day
                     day_events = [
                         event for event in all_events 
-                        if _event_date(event.get("start")) == check_date
+                        if _event_start_date(event) == check_date
                     ]
                     business_day_events.extend(day_events)
                     business_days_found += 1
@@ -993,7 +1241,24 @@ class EasyIQClient:
                     try:
                         payload = response.json()
                         payload_summary = _payload_summary(payload)
-                        events = _extract_calendar_event_list(payload)
+                        raw_events = _extract_calendar_event_list(
+                            payload,
+                            normalize=False,
+                        )
+                        events = [
+                            _normalize_calendar_event(event)
+                            for event in raw_events
+                        ]
+                        if raw_events:
+                            payload_summary["sample_event_keys"] = [
+                                str(key) for key in list(raw_events[0].keys())[:30]
+                            ]
+                            payload_summary["sample_event_preview"] = _event_preview(
+                                raw_events[0]
+                            )
+                            payload_summary["normalized_sample_event_preview"] = (
+                                _event_preview(events[0])
+                            )
                         _LOGGER.debug(f"Successfully parsed JSON response with {len(events)} events")
                     except Exception as json_error:
                         json_error_text = str(json_error)
@@ -1009,7 +1274,25 @@ class EasyIQClient:
                                 import json
                                 payload = json.loads(json_text)
                                 payload_summary = _payload_summary(payload)
-                                events = _extract_calendar_event_list(payload)
+                                raw_events = _extract_calendar_event_list(
+                                    payload,
+                                    normalize=False,
+                                )
+                                events = [
+                                    _normalize_calendar_event(event)
+                                    for event in raw_events
+                                ]
+                                if raw_events:
+                                    payload_summary["sample_event_keys"] = [
+                                        str(key)
+                                        for key in list(raw_events[0].keys())[:30]
+                                    ]
+                                    payload_summary["sample_event_preview"] = (
+                                        _event_preview(raw_events[0])
+                                    )
+                                    payload_summary["normalized_sample_event_preview"] = (
+                                        _event_preview(events[0])
+                                    )
                                 _LOGGER.debug("Manual Brotli decompression successful")
                             except Exception as decomp_error:
                                 manual_brotli_error = str(decomp_error)
@@ -1831,7 +2114,7 @@ class EasyIQClient:
         # Filter events to only include those on target dates
         filtered_events = []
         for event in events:
-            event_start_date = _event_date(event.get("start"))
+            event_start_date = _event_start_date(event)
             if event_start_date in target_dates:
                 filtered_events.append(event)
         
@@ -1849,7 +2132,7 @@ class EasyIQClient:
         # Group events by date
         events_by_date = {}
         for event in weekplan_events:
-            event_start_date = _event_date(event.get("start"))
+            event_start_date = _event_start_date(event)
             if event_start_date:
                 events_by_date.setdefault(event_start_date, []).append(event)
         

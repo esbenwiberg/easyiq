@@ -12,6 +12,9 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 INTEGRATION_DIR = ROOT / "custom_components" / "aula_easyiq"
+if str(INTEGRATION_DIR) in sys.path:
+    sys.path.remove(str(INTEGRATION_DIR))
+import calendar as _stdlib_calendar  # noqa: E402,F401 - keep stdlib calendar loaded
 
 
 def load_module(name: str, filename: str):
@@ -386,6 +389,40 @@ class EasyIQTokenAuthTests(unittest.TestCase):
 
         self.assertEqual(1, len(events))
         self.assertEqual("Math", events[0]["courses"])
+
+    def test_calendar_response_normalizes_split_date_time_without_item_type(self) -> None:
+        next_business_date = self._next_business_date()
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "date": next_business_date.isoformat(),
+                    "startTime": "08:00",
+                    "endTime": "09:00",
+                    "subject": {"name": "Math"},
+                    "lesson": "Classroom",
+                }
+            ]
+        )
+
+        self.assertEqual(1, len(events))
+        self.assertEqual("Math", events[0]["courses"])
+        self.assertEqual(9, events[0]["itemType"])
+        self.assertEqual("weekplan", events[0]["_easyiq_item_type_inferred"])
+
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="access-123",
+                refresh_token="refresh-123",
+                expires_at=time.time() + 3600,
+            ),
+            session_factory=lambda: FakeSession(),
+        )
+
+        filtered = client._filter_events_by_days(events, 1)
+
+        self.assertEqual(1, len(filtered))
+        self.assertEqual("Math", filtered[0]["courses"])
 
     def test_weekplan_html_groups_iso_event_dates(self) -> None:
         client = client_module.EasyIQClient(

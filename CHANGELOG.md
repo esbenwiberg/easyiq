@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.12] - 2026-06-21
+
+### Fixed
+- Normalize newer EasyIQ calendar records with alternate title/date/time/type field names before business-day filtering
+- Infer missing EasyIQ calendar item types as weekplan events when a returned record has a valid start date
+- Include raw and normalized sample event previews in calendar diagnostics when EasyIQ returns records
+
 ## [0.5.11] - 2026-06-21
 
 ### Added
