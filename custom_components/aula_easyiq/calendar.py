@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import html as html_lib
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -14,6 +16,16 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _clean_text(value: Any) -> str:
+    """Strip HTML and placeholder values from EasyIQ text fields."""
+    text = html_lib.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if text.lower() in {"none", "null", "undefined", "nan"}:
+        return ""
+    return text
 
 
 def _first_text(*values: Any, default: str = "") -> str:
@@ -42,7 +54,7 @@ def _first_text(*values: Any, default: str = "") -> str:
             if text:
                 return text
             continue
-        text = str(value).strip()
+        text = _clean_text(value)
         if text:
             return text
     return default

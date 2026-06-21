@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.14] - 2026-06-21
+
+### Fixed
+- Strip HTML tags and placeholder values from EasyIQ calendar titles and descriptions
+- Avoid using generic agenda HTML as the calendar event title when EasyIQ sends a blank `Title`
+- Read nested title fields case-insensitively and expand diagnostic event previews
+
 ## [0.5.13] - 2026-06-21
 
 ### Fixed

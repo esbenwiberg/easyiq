@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import asyncio
+import html as html_lib
 import logging
 from typing import Any, Callable
 from urllib.parse import urljoin
 import datetime
 import json
+import re
 
 # Import dependencies with better error handling
 aiohttp = None
@@ -164,6 +166,10 @@ _COURSE_KEYS = (
     "eventTitle",
     "calendarTitle",
     "calendarText",
+    "chapterTitle",
+    "icon",
+    "iconTitle",
+    "iconName",
     "entryTitle",
     "displayName",
     "heading",
@@ -190,6 +196,8 @@ _ACTIVITY_KEYS = (
     "teamName",
     "hold",
     "holdNavn",
+    "activityNames",
+    "activityTitles",
 )
 _DESCRIPTION_KEYS = (
     "description",
@@ -202,6 +210,16 @@ _DESCRIPTION_KEYS = (
 )
 
 
+def _clean_text(value: Any) -> str:
+    """Strip HTML and placeholder values from EasyIQ text fields."""
+    text = html_lib.unescape(str(value or ""))
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if text.lower() in {"none", "null", "undefined", "nan"}:
+        return ""
+    return text
+
+
 def _event_value(event: dict[str, Any], keys: tuple[str, ...]) -> Any:
     """Return the first non-empty value for any key, case-insensitively."""
     lower_key_map = {str(key).lower(): key for key in event}
@@ -210,6 +228,10 @@ def _event_value(event: dict[str, Any], keys: tuple[str, ...]) -> Any:
         if actual_key is None:
             continue
         value = event.get(actual_key)
+        if isinstance(value, str):
+            if _clean_text(value):
+                return value
+            continue
         if value not in (None, ""):
             return value
     return None
@@ -220,6 +242,7 @@ def _field_text(value: Any) -> str:
     if value in (None, ""):
         return ""
     if isinstance(value, dict):
+        lower_key_map = {str(key).lower(): key for key in value}
         for key in (
             "name",
             "displayName",
@@ -236,19 +259,20 @@ def _field_text(value: Any) -> str:
             "headline",
             "caption",
         ):
-            text = _field_text(value.get(key))
+            actual_key = key if key in value else lower_key_map.get(key.lower())
+            text = _field_text(value.get(actual_key)) if actual_key is not None else ""
             if text:
                 return text
         return ""
     if isinstance(value, list):
         parts = [_field_text(item) for item in value]
         return ", ".join(part for part in parts if part)
-    return str(value)
+    return _clean_text(value)
 
 
 def _event_title_text(event: dict[str, Any]) -> str:
     """Return the best visible title for a calendar event."""
-    for keys in (_COURSE_KEYS, _ACTIVITY_KEYS, _DESCRIPTION_KEYS):
+    for keys in (_COURSE_KEYS, _ACTIVITY_KEYS):
         text = _field_text(_event_value(event, keys)).strip()
         if text:
             return text
@@ -424,7 +448,7 @@ def _event_preview(event: dict[str, Any]) -> dict[str, Any]:
     """Return a compact event preview for diagnostics."""
     return {
         str(key): _preview_value(value)
-        for key, value in list(event.items())[:20]
+        for key, value in list(event.items())[:60]
     }
 
 

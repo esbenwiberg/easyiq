@@ -441,6 +441,42 @@ class EasyIQTokenAuthTests(unittest.TestCase):
 
         self.assertEqual("Matematik", events[0]["courses"])
 
+    def test_calendar_response_does_not_use_html_description_as_title(self) -> None:
+        next_business_date = self._next_business_date()
+
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 08:05",
+                    "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 09:35",
+                    "ItemType": 9,
+                    "Title": " ",
+                    "Description": "<p>Dagsorden:</p><p>&nbsp;</p>",
+                }
+            ]
+        )
+
+        self.assertEqual("School Event", events[0]["courses"])
+        self.assertEqual("Dagsorden:", events[0]["description"])
+
+    def test_calendar_response_uses_icon_title_when_main_title_is_blank(self) -> None:
+        next_business_date = self._next_business_date()
+
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 08:05",
+                    "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 09:35",
+                    "ItemType": 9,
+                    "Title": " ",
+                    "Icon": {"Title": "Dansk"},
+                    "Description": "<p>Dagsorden:</p><p>&nbsp;</p>",
+                }
+            ]
+        )
+
+        self.assertEqual("Dansk", events[0]["courses"])
+
     def test_weekplan_html_groups_iso_event_dates(self) -> None:
         client = client_module.EasyIQClient(
             "guardian@example.test",
