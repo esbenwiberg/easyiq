@@ -477,6 +477,25 @@ class EasyIQTokenAuthTests(unittest.TestCase):
 
         self.assertEqual("Dansk", events[0]["courses"])
 
+    def test_calendar_response_ignores_plain_icon_path_as_title(self) -> None:
+        next_business_date = self._next_business_date()
+
+        events = client_module._extract_calendar_event_list(
+            [
+                {
+                    "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 08:00",
+                    "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 09:00",
+                    "ItemType": 8,
+                    "Title": " ",
+                    "Icon": "/Images/24/Calendar.png",
+                    "Description": "Vi har Oustmølle-rock",
+                }
+            ]
+        )
+
+        self.assertEqual("School Event", events[0]["courses"])
+        self.assertEqual("Vi har Oustmølle-rock", events[0]["description"])
+
     def test_calendar_response_prefers_courses_display_over_agenda_text(self) -> None:
         next_business_date = self._next_business_date()
 
@@ -499,19 +518,60 @@ class EasyIQTokenAuthTests(unittest.TestCase):
         self.assertEqual("2A", events[0]["activities"])
         self.assertEqual("Dagsorden:", events[0]["description"])
 
-    def test_homework_filter_accepts_easyiq_item_type_8(self) -> None:
-        events = [
-            {"itemType": 4, "courses": "Classic homework"},
-            {"ItemType": 8, "CoursesDisplay": "New homework"},
-            {"ItemType": 9, "CoursesDisplay": "Weekplan"},
+    def test_item_type_8_is_regular_calendar_event_not_homework(self) -> None:
+        next_business_date = self._next_business_date()
+        raw_events = [
+            {
+                "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 08:00",
+                "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 09:00",
+                "ItemType": 8,
+                "Title": "Lektier",
+                "ActivitiesDisplay": "2A",
+                "Description": "Vi har Oustmølle-rock",
+            },
+            {
+                "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 10:00",
+                "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 11:00",
+                "ItemType": 9,
+                "CoursesDisplay": "Dansk",
+                "ActivitiesDisplay": "2A",
+                "Description": "<p>Dagsorden:</p><p>&nbsp;</p>",
+            },
+            {
+                "StartTime": f"{next_business_date.strftime('%Y/%m/%d')} 12:00",
+                "EndTime": f"{next_business_date.strftime('%Y/%m/%d')} 13:00",
+                "ItemType": 4,
+                "CoursesDisplay": "Read pages",
+                "ActivitiesDisplay": "2A",
+                "Description": "Read chapter 4",
+            },
         ]
+        client = client_module.EasyIQClient(
+            "guardian@example.test",
+            mitid_auth.AulaTokenState(
+                access_token="access-123",
+                refresh_token="refresh-123",
+                expires_at=time.time() + 3600,
+            ),
+            session_factory=lambda: FakeSession(),
+        )
+        client._authenticated = True
 
-        homework_events = client_module._events_of_types(events, (4, 8))
+        async def fake_calendar_events(child_id: str) -> list[dict[str, Any]]:
+            return client_module._extract_calendar_event_list(raw_events)
 
-        self.assertEqual(["Classic homework", "New homework"], [
-            event.get("courses") or event.get("CoursesDisplay")
-            for event in homework_events
-        ])
+        client._get_calendar_events = fake_calendar_events
+        weekplan = asyncio.run(client.get_weekplan("child-1"))
+        homework = asyncio.run(client.get_homework("child-1"))
+
+        self.assertEqual(
+            ["Lektier", "Dansk"],
+            [event["courses"] for event in weekplan["events"]],
+        )
+        self.assertEqual(
+            ["Read pages"],
+            [assignment["subject"] for assignment in homework["assignments"]],
+        )
 
     def test_weekplan_html_groups_iso_event_dates(self) -> None:
         client = client_module.EasyIQClient(

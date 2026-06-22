@@ -214,6 +214,8 @@ _DESCRIPTION_KEYS = (
     "body",
     "comment",
 )
+_WEEKPLAN_EVENT_TYPES = (8, 9)
+_HOMEWORK_EVENT_TYPES = (4,)
 
 
 def _clean_text(value: Any) -> str:
@@ -224,6 +226,19 @@ def _clean_text(value: Any) -> str:
     if text.lower() in {"none", "null", "undefined", "nan"}:
         return ""
     return text
+
+
+def _is_plain_image_path(text: str) -> bool:
+    """Return true for bare EasyIQ icon/image paths that are not titles."""
+    lowered = text.lower()
+    if not (
+        lowered.startswith("/images/")
+        or lowered.startswith("images/")
+        or lowered.startswith("http://")
+        or lowered.startswith("https://")
+    ):
+        return False
+    return bool(re.search(r"\.(?:png|svg|jpe?g|gif|webp)(?:$|\?)", lowered))
 
 
 def _event_value(event: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -273,7 +288,10 @@ def _field_text(value: Any) -> str:
     if isinstance(value, list):
         parts = [_field_text(item) for item in value]
         return ", ".join(part for part in parts if part)
-    return _clean_text(value)
+    text = _clean_text(value)
+    if _is_plain_image_path(text):
+        return ""
+    return text
 
 
 def _event_title_text(event: dict[str, Any]) -> str:
@@ -1522,8 +1540,9 @@ class EasyIQClient:
                     "event_type_counts": {},
                 }
             
-            # Filter for weekplan events (itemType 9 = schedule events)
-            weekplan_events = _events_of_type(events, 9)
+            # Filter for regular calendar events. EasyIQ returns lesson rows
+            # as itemType 9 and regular calendar rows as itemType 8.
+            weekplan_events = _events_of_types(events, _WEEKPLAN_EVENT_TYPES)
             
             # Process weekplan events
             current_date = datetime.datetime.now()
@@ -1583,9 +1602,8 @@ class EasyIQClient:
                     "event_type_counts": {},
                 }
             
-            # Filter for homework/assignment events. EasyIQ has returned both
-            # itemType 4 and itemType 8 for homework-like calendar rows.
-            homework_events = _events_of_types(events, (4, 8))
+            # Filter for homework/assignment events.
+            homework_events = _events_of_types(events, _HOMEWORK_EVENT_TYPES)
             
             # Process homework events
             current_date = datetime.datetime.now()
@@ -1928,8 +1946,14 @@ class EasyIQClient:
                         business_day_events = await self.get_calendar_events_for_business_days(child_id, max_days)
                         
                         # Separate weekplan and homework events
-                        all_weekplan_events = _events_of_type(business_day_events, 9)
-                        all_homework_events = _events_of_types(business_day_events, (4, 8))
+                        all_weekplan_events = _events_of_types(
+                            business_day_events,
+                            _WEEKPLAN_EVENT_TYPES,
+                        )
+                        all_homework_events = _events_of_types(
+                            business_day_events,
+                            _HOMEWORK_EVENT_TYPES,
+                        )
                         
                         # Filter events based on configured days
                         weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
@@ -2097,7 +2121,10 @@ class EasyIQClient:
                             
                             if update_weekplan:
                                 # Separate and filter weekplan events
-                                all_weekplan_events = _events_of_type(business_day_events, 9)
+                                all_weekplan_events = _events_of_types(
+                                    business_day_events,
+                                    _WEEKPLAN_EVENT_TYPES,
+                                )
                                 weekplan_events = self._filter_events_by_days(all_weekplan_events, weekplan_days)
                                 weekplan_desc = f"Next {weekplan_days} Business Day{'s' if weekplan_days != 1 else ''}"
                                 self.weekplan_data[child_id] = {
@@ -2117,7 +2144,10 @@ class EasyIQClient:
                             
                             if update_homework:
                                 # Separate and filter homework events
-                                all_homework_events = _events_of_types(business_day_events, (4, 8))
+                                all_homework_events = _events_of_types(
+                                    business_day_events,
+                                    _HOMEWORK_EVENT_TYPES,
+                                )
                                 homework_events = self._filter_events_by_days(all_homework_events, homework_days)
                                 homework_assignments = []
                                 for event in homework_events:

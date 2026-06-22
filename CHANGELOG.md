@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.16] - 2026-06-22
+
+### Fixed
+- Treat EasyIQ `ItemType` 8 rows as regular calendar events instead of homework
+- Keep homework calendar events limited to EasyIQ homework/assignment rows
+- Ignore plain EasyIQ icon image paths when selecting visible calendar titles
+
 ## [0.5.15] - 2026-06-21
 
 ### Fixed
