@@ -149,6 +149,51 @@ def install_dependency_stubs() -> None:
     exceptions.HomeAssistantError = HomeAssistantError
     sys.modules.setdefault("homeassistant.exceptions", exceptions)
 
+    helpers = types.ModuleType("homeassistant.helpers")
+    network = types.ModuleType("homeassistant.helpers.network")
+
+    class NoURLAvailableError(Exception):
+        pass
+
+    def get_url(hass: Any, *, require_current_request: bool = False) -> str:
+        # Mirrors real Home Assistant: no request-bound URL is available in
+        # this fake hass, so require_current_request always misses; a
+        # configured instance URL is available as the fallback.
+        if require_current_request:
+            raise NoURLAvailableError("no current request")
+        return "https://ha.example.test:8123"
+
+    network.NoURLAvailableError = NoURLAvailableError
+    network.get_url = get_url
+    helpers.network = network
+    homeassistant.helpers = helpers
+    sys.modules.setdefault("homeassistant.helpers", helpers)
+    sys.modules.setdefault("homeassistant.helpers.network", network)
+
+    # views.py (imported lazily by config_flow._async_register_auth_views)
+    # depends on aiohttp and homeassistant.components.http; stub both so
+    # that import succeeds. FakeHass pre-marks views as already registered,
+    # so none of these stub classes need real behaviour.
+    aiohttp_module = types.ModuleType("aiohttp")
+    aiohttp_web_module = types.ModuleType("aiohttp.web")
+    aiohttp_web_module.Request = object
+    aiohttp_web_module.Response = object
+    aiohttp_web_module.json_response = lambda *args, **kwargs: (args, kwargs)
+    aiohttp_module.web = aiohttp_web_module
+    sys.modules.setdefault("aiohttp", aiohttp_module)
+    sys.modules.setdefault("aiohttp.web", aiohttp_web_module)
+
+    components = types.ModuleType("homeassistant.components")
+    http_module = types.ModuleType("homeassistant.components.http")
+
+    class HomeAssistantView:
+        requires_auth = True
+
+    http_module.HomeAssistantView = HomeAssistantView
+    homeassistant.components = components
+    sys.modules.setdefault("homeassistant.components", components)
+    sys.modules.setdefault("homeassistant.components.http", http_module)
+
     custom_components = types.ModuleType("custom_components")
     custom_components.__path__ = [str(ROOT / "custom_components")]
     aula_easyiq = types.ModuleType("custom_components.aula_easyiq")
@@ -175,8 +220,17 @@ AbortFlow = sys.modules["homeassistant.data_entry_flow"].AbortFlow
 
 class FakeHass:
     def __init__(self, manager: Any) -> None:
-        self.data = {"aula_easyiq": {"mitid_auth_manager": manager}}
+        self.data = {
+            "aula_easyiq": {
+                "mitid_auth_manager": manager,
+                "mitid_auth_views_registered": True,
+            }
+        }
 
+    def async_create_task(self, coroutine: Any) -> None:
+        # Don't actually run the live MitID auth background task; just
+        # avoid a "coroutine was never awaited" warning.
+        coroutine.close()
 
 class FakeConfigEntry:
     def __init__(self) -> None:
@@ -211,6 +265,33 @@ class MitIDExternalFlowTests(unittest.TestCase):
         self.assertFalse(handler._get_option("weekplan", True))
         self.assertFalse(handler._get_option("homework", True))
         self.assertTrue(handler._get_option("presence", True))
+
+    def test_user_step_returns_absolute_external_step_url(self) -> None:
+        # Regression test for https://github.com/esbenwiberg/easyiq/issues/9:
+        # Home Assistant 2026.8+ only opens absolute http(s) URLs for
+        # config-flow external steps, so a relative "/api/..." URL silently
+        # fails with "This step requires visiting an external website."
+        flow = config_flow.ConfigFlow()
+        flow.hass = FakeHass(mitid_auth.MitIDAuthManager())
+
+        result = asyncio.run(
+            flow.async_step_user(
+                {
+                    "mitid_username": "guardian@example.test",
+                    "schoolschedule": True,
+                    "weekplan": True,
+                    "homework": True,
+                    "presence": True,
+                }
+            )
+        )
+
+        self.assertEqual("external", result["type"])
+        self.assertTrue(
+            result["url"].startswith("https://ha.example.test:8123/"),
+            f"expected an absolute URL, got {result['url']!r}",
+        )
+
 
     def test_completed_external_step_reports_done_before_creating_entry(self) -> None:
         manager = mitid_auth.MitIDAuthManager()

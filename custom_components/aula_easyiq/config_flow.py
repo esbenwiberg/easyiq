@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import network
 
 from .const import (
     CONF_ACCESS_TOKEN,
@@ -83,6 +84,28 @@ def entry_data_from_auth(
     """Build config entry data from user input and a completed MitID session."""
     return build_config_entry_data(user_input, session)
 
+def _get_absolute_base_url(hass: HomeAssistant) -> str | None:
+    """Resolve an absolute Home Assistant base URL for external auth steps.
+
+    Home Assistant 2026.8+ sanitizes config-flow external-step URLs and only
+    opens absolute ``http://``/``https://`` URLs, so a relative
+    ``/api/aula_easyiq/auth/<flow_id>`` path silently fails to open (the user
+    only sees "This step requires visiting an external website"). Prefer the
+    URL matching the current request (e.g. the browser's own hostname) and
+    fall back to any configured Home Assistant URL if that isn't available.
+    """
+    try:
+        return network.get_url(hass, require_current_request=True)
+    except network.NoURLAvailableError:
+        try:
+            return network.get_url(hass)
+        except network.NoURLAvailableError:
+            _LOGGER.warning(
+                "Could not resolve an absolute Home Assistant URL for the "
+                "MitID external auth step; falling back to a relative URL, "
+                "which Home Assistant 2026.8+ will not open automatically."
+            )
+            return None
 
 async def validate_input(
     hass: HomeAssistant,
@@ -97,6 +120,7 @@ async def validate_input(
         raise InvalidAuth("MitID username is required")
 
     manager = auth_manager or get_auth_manager(hass)
+    base_url = _get_absolute_base_url(hass)
 
     if {
         CONF_ACCESS_TOKEN,
@@ -104,10 +128,10 @@ async def validate_input(
         CONF_TOKEN_EXPIRES_AT,
     }.issubset(data):
         token_state = AulaTokenState.from_entry_data(data)
-        session = manager.start_session(username, ha_flow_id=ha_flow_id)
+        session = manager.start_session(username, ha_flow_id=ha_flow_id, base_url=base_url)
         session = manager.complete_session(session.flow_id, token_state, username=username)
     else:
-        session = manager.start_session(username, ha_flow_id=ha_flow_id)
+        session = manager.start_session(username, ha_flow_id=ha_flow_id, base_url=base_url)
 
     return {
         "title": f"EasyIQ ({username})",

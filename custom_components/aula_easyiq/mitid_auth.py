@@ -238,14 +238,17 @@ class MitIDAuthManager:
         username: str,
         *,
         ha_flow_id: str | None = None,
+        base_url: str | None = None,
     ) -> MitIDAuthSession:
         """Start a new external MitID auth session."""
         flow_id = uuid4().hex
+        path = f"{self.base_path}/{flow_id}"
+        external_url = f"{base_url.rstrip('/')}{path}" if base_url else path
         session = MitIDAuthSession(
             flow_id=flow_id,
             username=username,
             status="pending",
-            external_url=f"{self.base_path}/{flow_id}",
+            external_url=external_url,
             message="Complete guardian MitID authentication in the opened browser window.",
             ha_flow_id=ha_flow_id,
         )
